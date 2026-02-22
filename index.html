@@ -1,558 +1,414 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
-
-// --- FIREBASE INICIALIZACE ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'barbershop-app';
-
-// --- NASTAVENÍ PIN KÓDŮ (Můžeš si změnit) ---
-const ADMIN_PIN = '1234';
-const UCETNI_PIN = '5678';
-
-// --- DATA ---
-const SERVICES = [
-  { name: 'Klasický střih', price: 520 },
-  { name: 'Střih strojkem', price: 470 },
-  { name: 'Klasický střih a úprava vousů hot towel', price: 995 },
-  { name: 'Klasický střih a úprava vousů strojkem', price: 950 },
-  { name: 'Úprava vousů metodou hot towel', price: 490 },
-  { name: 'Úprava vousů pouze strojkem', price: 460 },
-  { name: 'Střih junior (do 8 let)', price: 420 },
-  { name: 'Tradiční holení', price: 520 },
-  { name: 'Holení hlavy', price: 520 },
-  { name: 'Střih dlouhých vlasů', price: 895 },
-  { name: 'Střih strojkem a úprava vousů strojkem', price: 900 },
-  { name: 'Střih strojkem a úprava vousů hot towel', price: 965 },
-  { name: 'Depilace chloupků z nosu a uší', price: 100 },
-  { name: 'Barvení vousů', price: 550 },
-  { name: 'Černá maska', price: 150 },
-  { name: 'Barvení kontur', price: 300 },
-  { name: 'Kompletní úprava', price: 1695 }
-];
-
-const PAYMENTS = ['HOTOVOST', 'QR', 'POUKAZ'];
-const ROLES = ['Admin (Majitel)', 'Kadeřník 1', 'Kadeřník 2', 'Účetní'];
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [records, setRecords] = useState([]);
-  const [settings, setSettings] = useState({});
-  const [activeRole, setActiveRole] = useState('');
-  
-  // Získání aktuálního měsíce ve formátu YYYY-MM
-  const today = new Date();
-  const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    date: '',
-    time: '',
-    service: SERVICES[0].name,
-    price: SERVICES[0].price,
-    payment: PAYMENTS[0],
-    voucherCode: '',
-    notes: '',
-    barber: 'Kadeřník 1'
-  });
-
-  // --- STAVY PRO JEDNODUCHÉ PŘIHLÁŠENÍ ---
-  const [isAppUnlocked, setIsAppUnlocked] = useState(false);
-  const [selectedLoginRole, setSelectedLoginRole] = useState('Kadeřník 1');
-  const [pinInput, setPinInput] = useState('');
-  const [loginError, setLoginError] = useState('');
-
-  // --- FIREBASE AUTH & DATA FETCHING ---
-  // Aplikace na pozadí vytvoří anonymní spojení s databází pro čtení/zápis dat
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (e) {
-        console.error("Auth error", e);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-
-    // Načítání záznamů (sdílená data pro všechny zaměstnance)
-    const recordsRef = collection(db, 'artifacts', appId, 'public', 'data', 'records');
-    const unsubRecords = onSnapshot(recordsRef, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Seřazení podle data a času
-      data.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-      setRecords(data);
-    }, (error) => console.error("Chyba načítání dat:", error));
-
-    // Načítání nastavení (uzamčené měsíce)
-    const settingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'settings');
-    const unsubSettings = onSnapshot(settingsRef, (snapshot) => {
-      const data = {};
-      snapshot.docs.forEach(doc => { data[doc.id] = doc.data(); });
-      setSettings(data);
-    }, (error) => console.error("Chyba načítání nastavení:", error));
-
-    return () => {
-      unsubRecords();
-      unsubSettings();
-    };
-  }, [user]);
-
-  // --- PŘIHLAŠOVACÍ LOGIKA ---
-  const handleEasyLogin = (e) => {
-    e.preventDefault();
-    setLoginError('');
-
-    if (selectedLoginRole === 'Admin (Majitel)' && pinInput !== ADMIN_PIN) {
-      setLoginError('Nesprávný PIN kód!');
-      return;
-    }
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barber Systém</title>
     
-    if (selectedLoginRole === 'Účetní' && pinInput !== UCETNI_PIN) {
-      setLoginError('Nesprávný PIN kód!');
-      return;
-    }
-
-    // Pokud je PIN správný nebo se hlásí Kadeřník (bez PINu)
-    setActiveRole(selectedLoginRole);
-    setFormData(prev => ({ ...prev, barber: selectedLoginRole.includes('Kadeřník') ? selectedLoginRole : 'Kadeřník 1' }));
-    setIsAppUnlocked(true);
-  };
-
-  const handleLogout = () => {
-    setIsAppUnlocked(false);
-    setPinInput('');
-  };
-
-  // --- LOGIKA APLIKACE ---
-  const isMonthLocked = settings[selectedMonth]?.locked === true;
-  const isBarber = activeRole.includes('Kadeřník');
-  const isAdmin = activeRole === 'Admin (Majitel)';
-  
-  // Pokud je měsíc zamčený, kadeřník ho vůbec nevidí (dostane prázdné pole)
-  const filteredRecords = useMemo(() => {
-    if (isBarber && isMonthLocked) return [];
+    <!-- Nástroje pro design (Tailwind) a React -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    return records.filter(record => {
-      const recordMonth = record.date.substring(0, 7); // Získá YYYY-MM z YYYY-MM-DD
-      return recordMonth === selectedMonth;
-    });
-  }, [records, selectedMonth, isMonthLocked, isBarber]);
+    <style>
+        body { background-color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <!-- Zde se vykreslí celá aplikace -->
+    <div id="root"></div>
 
-  const totals = useMemo(() => {
-    return filteredRecords.reduce((acc, curr) => {
-      acc.total += Number(curr.price) || 0;
-      if (curr.payment === 'HOTOVOST') acc.cash += Number(curr.price) || 0;
-      if (curr.payment === 'QR') acc.qr += Number(curr.price) || 0;
-      if (curr.payment === 'POUKAZ') acc.voucher += Number(curr.price) || 0;
-      acc.count += 1;
-      return acc;
-    }, { total: 0, cash: 0, qr: 0, voucher: 0, count: 0 });
-  }, [filteredRecords]);
+    <!-- Hlavní kód aplikace -->
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-  // --- AKCE ---
-  const handleServiceChange = (e) => {
-    const serviceName = e.target.value;
-    const service = SERVICES.find(s => s.name === serviceName);
-    setFormData({ ...formData, service: serviceName, price: service.price });
-  };
+        const { useState, useEffect, useMemo } = React;
 
-  const handleSaveRecord = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    
-    if (formData.payment === 'POUKAZ' && !formData.voucherCode.trim()) {
-      alert("Při platbě poukazem je nutné zadat číslo poukazu!");
-      return;
-    }
+        // --- TVŮJ FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBf8IfMax0l5uvl9VdertYcK5ruVPBSvuE",
+            authDomain: "barber-tabulky.firebaseapp.com",
+            projectId: "barber-tabulky",
+            storageBucket: "barber-tabulky.firebasestorage.app",
+            messagingSenderId: "165152546039",
+            appId: "1:165152546039:web:19b8a86e8e215c883cc7f2",
+            measurementId: "G-PQ32GEK6QV"
+        };
 
-    try {
-      const recordsRef = collection(db, 'artifacts', appId, 'public', 'data', 'records');
-      await addDoc(recordsRef, {
-        ...formData,
-        createdAt: new Date().toISOString(),
-        addedBy: activeRole
-      });
-      setIsModalOpen(false);
-      setFormData({
-        ...formData,
-        time: '',
-        payment: PAYMENTS[0],
-        voucherCode: '',
-        notes: ''
-      });
-    } catch (error) {
-      console.error("Chyba při ukládání:", error);
-    }
-  };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-  const handleDelete = async (id) => {
-    if (!user) return;
-    if (window.confirm("Opravdu smazat tento záznam?")) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', id));
-    }
-  };
+        // --- NASTAVENÍ PIN KÓDŮ (Změň si podle sebe) ---
+        const ADMIN_PIN = '1234';
+        const UCETNI_PIN = '5678';
 
-  const toggleLockMonth = async () => {
-    if (!user || !isAdmin) return;
-    const monthDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', selectedMonth);
-    await setDoc(monthDocRef, { locked: !isMonthLocked }, { merge: true });
-  };
+        // --- DATA SLUŽEB ---
+        const SERVICES = [
+            { name: 'Klasický střih', price: 520 },
+            { name: 'Střih strojkem', price: 470 },
+            { name: 'Klasický střih a úprava vousů hot towel', price: 995 },
+            { name: 'Klasický střih a úprava vousů strojkem', price: 950 },
+            { name: 'Úprava vousů metodou hot towel', price: 490 },
+            { name: 'Úprava vousů pouze strojkem', price: 460 },
+            { name: 'Střih junior (do 8 let)', price: 420 },
+            { name: 'Tradiční holení', price: 520 },
+            { name: 'Holení hlavy', price: 520 },
+            { name: 'Střih dlouhých vlasů', price: 895 },
+            { name: 'Střih strojkem a úprava vousů strojkem', price: 900 },
+            { name: 'Střih strojkem a úprava vousů hot towel', price: 965 },
+            { name: 'Depilace chloupků z nosu a uší', price: 100 },
+            { name: 'Barvení vousů', price: 550 },
+            { name: 'Černá maska', price: 150 },
+            { name: 'Barvení kontur', price: 300 },
+            { name: 'Kompletní úprava', price: 1695 }
+        ];
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-');
-    return `${day}.${month}.${year}`;
-  };
+        const PAYMENTS = ['HOTOVOST', 'QR', 'POUKAZ'];
+        const ROLES = ['Admin (Majitel)', 'Kadeřník 1', 'Kadeřník 2', 'Účetní'];
 
-  // --- OBRAZOVKA JEDNODUCHÉHO PŘIHLÁŠENÍ ---
-  if (!isAppUnlocked) {
-    const requiresPin = selectedLoginRole === 'Admin (Majitel)' || selectedLoginRole === 'Účetní';
-    
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-md border border-gray-100">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center font-bold text-3xl mx-auto mb-4">✂️</div>
-            <h2 className="text-3xl font-extrabold text-gray-900">Vstup do systému</h2>
-            <p className="mt-2 text-gray-500">Vyberte, kdo zrovna pracuje</p>
-          </div>
-          
-          <form className="mt-8 space-y-6" onSubmit={handleEasyLogin}>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Vaše role</label>
-              <select 
-                value={selectedLoginRole} 
-                onChange={(e) => {
-                  setSelectedLoginRole(e.target.value);
-                  setPinInput('');
-                  setLoginError('');
-                }}
-                className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-amber-500 focus:border-amber-500 text-lg font-medium"
-              >
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-
-            {requiresPin && (
-              <div className="animate-fade-in">
-                <label className="block text-sm font-medium text-gray-700 mb-2">PIN Kód</label>
-                <input 
-                  type="password" 
-                  required 
-                  maxLength="4"
-                  pattern="[0-9]*"
-                  inputMode="numeric"
-                  className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-amber-500 focus:border-amber-500 text-center text-2xl tracking-widest" 
-                  placeholder="••••" 
-                  value={pinInput} 
-                  onChange={(e) => setPinInput(e.target.value)} 
-                />
-              </div>
-            )}
-
-            {loginError && <p className="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded">{loginError}</p>}
+        function App() {
+            const [user, setUser] = useState(null);
+            const [records, setRecords] = useState([]);
+            const [settings, setSettings] = useState({});
+            const [activeRole, setActiveRole] = useState('');
             
-            <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent text-lg font-bold rounded-md text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 shadow-md transition-all">
-              Vstoupit do aplikace
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // --- HLAVNÍ APLIKACE ---
-  return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-      {/* HEADER */}
-      <header className="bg-slate-900 text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center font-bold text-xl">
-              ✂️
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight">Barber Systém</h1>
-          </div>
-          
-          <div className="flex items-center gap-4 bg-slate-800 p-2 rounded-lg border border-slate-700">
-            <span className="text-xs text-slate-400 uppercase tracking-wider">Přihlášen jako:</span>
-            <span className="text-amber-400 font-semibold">{activeRole}</span>
-            <div className="h-4 w-px bg-slate-600 mx-2"></div>
-            <button onClick={handleLogout} className="text-sm text-slate-300 hover:text-white underline font-medium">
-              Odhlásit
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        
-        {/* TOP CONTROLS */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Vyberte měsíc</label>
-              <input 
-                type="month" 
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 px-3 text-base focus:border-amber-500 focus:ring-amber-500 sm:text-sm font-semibold cursor-pointer"
-              />
-            </div>
+            const today = new Date();
+            const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
             
-            {isAdmin && (
-              <div className="mt-6">
-                <button 
-                  onClick={toggleLockMonth}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors shadow-sm ${
-                    isMonthLocked 
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200' 
-                      : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'
-                  }`}
-                >
-                  {isMonthLocked ? '🔒 Měsíc Uzamčen (Odemknout)' : '🔓 Měsíc Otevřen (Zamknout)'}
-                </button>
-              </div>
-            )}
-          </div>
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [formData, setFormData] = useState({
+                date: '',
+                time: '',
+                service: SERVICES[0].name,
+                price: SERVICES[0].price,
+                payment: PAYMENTS[0],
+                voucherCode: '',
+                notes: '',
+                barber: 'Kadeřník 1'
+            });
 
-          {/* Přidat záznam */}
-          {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 transform hover:scale-105"
-            >
-              <span className="text-xl leading-none">+</span> Nový zákazník
-            </button>
-          )}
-        </div>
+            const [isAppUnlocked, setIsAppUnlocked] = useState(false);
+            const [selectedLoginRole, setSelectedLoginRole] = useState('Kadeřník 1');
+            const [pinInput, setPinInput] = useState('');
+            const [loginError, setLoginError] = useState('');
 
-        {/* MAIN CONTENT AREA */}
-        {isBarber && isMonthLocked ? (
-          <div className="bg-red-50 text-red-600 p-12 rounded-xl text-center border border-red-100 shadow-sm">
-            <div className="text-5xl mb-4">🔒</div>
-            <h2 className="text-3xl font-bold mb-2">Tento měsíc je uzavřen</h2>
-            <p className="text-lg">Výkazy byly předány účetnímu. Pro úpravy kontaktujte majitele.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col lg:flex-row gap-8">
+            // Přihlášení k databázi na pozadí
+            useEffect(() => {
+                signInAnonymously(auth).catch((error) => console.error("Chyba ověření databáze:", error));
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // Načítání dat z Tvojí databáze
+            useEffect(() => {
+                if (!user) return;
+
+                const recordsRef = collection(db, 'barber_records');
+                const unsubRecords = onSnapshot(recordsRef, (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    data.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+                    setRecords(data);
+                }, (error) => console.error("Chyba čtení:", error));
+
+                const settingsRef = collection(db, 'barber_settings');
+                const unsubSettings = onSnapshot(settingsRef, (snapshot) => {
+                    const data = {};
+                    snapshot.docs.forEach(doc => { data[doc.id] = doc.data(); });
+                    setSettings(data);
+                });
+
+                return () => { unsubRecords(); unsubSettings(); };
+            }, [user]);
+
+            const handleEasyLogin = (e) => {
+                e.preventDefault();
+                setLoginError('');
+
+                if (selectedLoginRole === 'Admin (Majitel)' && pinInput !== ADMIN_PIN) {
+                    setLoginError('Nesprávný PIN kód!'); return;
+                }
+                if (selectedLoginRole === 'Účetní' && pinInput !== UCETNI_PIN) {
+                    setLoginError('Nesprávný PIN kód!'); return;
+                }
+
+                setActiveRole(selectedLoginRole);
+                setFormData(prev => ({ ...prev, barber: selectedLoginRole.includes('Kadeřník') ? selectedLoginRole : 'Kadeřník 1' }));
+                setIsAppUnlocked(true);
+            };
+
+            const isMonthLocked = settings[selectedMonth]?.locked === true;
+            const isBarber = activeRole.includes('Kadeřník');
+            const isAdmin = activeRole === 'Admin (Majitel)';
             
-            {/* TABLE */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Datum a Čas</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Kadeřník</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Služba</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Platba</th>
-                      <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Cena</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Poznámky</th>
-                      {isAdmin && <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Akce</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {filteredRecords.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="px-6 py-16 text-center text-gray-400 text-lg">
-                          V tomto měsíci nejsou zatím žádné záznamy.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRecords.map((record) => (
-                        <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {formatDate(record.date)} <span className="text-gray-400 ml-2">{record.time}</span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
-                            {record.barber}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
-                            {record.service}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full 
-                              ${record.payment === 'HOTOVOST' ? 'bg-red-100 text-red-800' : ''}
-                              ${record.payment === 'KARTA' || record.payment === 'QR' ? 'bg-green-100 text-green-800' : ''}
-                              ${record.payment === 'POUKAZ' ? 'bg-purple-100 text-purple-800' : ''}
-                            `}>
-                              {record.payment}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right text-lg">
-                            {record.price} Kč
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            {record.payment === 'POUKAZ' && <span className="inline-block bg-purple-50 border border-purple-200 px-2 py-0.5 rounded text-purple-700 font-bold mb-1">Poukaz: {record.voucherCode}</span>}
-                            <div className="truncate max-w-xs" title={record.notes}>{record.notes}</div>
-                          </td>
-                          {isAdmin && (
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <button onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded transition-colors">
-                                Smazat
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
+            const filteredRecords = useMemo(() => {
+                if (isBarber && isMonthLocked) return [];
+                return records.filter(record => record.date.substring(0, 7) === selectedMonth);
+            }, [records, selectedMonth, isMonthLocked, isBarber]);
+
+            const totals = useMemo(() => {
+                return filteredRecords.reduce((acc, curr) => {
+                    acc.total += Number(curr.price) || 0;
+                    if (curr.payment === 'HOTOVOST') acc.cash += Number(curr.price) || 0;
+                    if (curr.payment === 'QR') acc.qr += Number(curr.price) || 0;
+                    if (curr.payment === 'POUKAZ') acc.voucher += Number(curr.price) || 0;
+                    acc.count += 1;
+                    return acc;
+                }, { total: 0, cash: 0, qr: 0, voucher: 0, count: 0 });
+            }, [filteredRecords]);
+
+            const handleServiceChange = (e) => {
+                const serviceName = e.target.value;
+                const service = SERVICES.find(s => s.name === serviceName);
+                setFormData({ ...formData, service: serviceName, price: service.price });
+            };
+
+            const handleSaveRecord = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                if (formData.payment === 'POUKAZ' && !formData.voucherCode.trim()) {
+                    alert("Při platbě poukazem je nutné zadat číslo poukazu!"); return;
+                }
+                try {
+                    await addDoc(collection(db, 'barber_records'), { ...formData, createdAt: new Date().toISOString(), addedBy: activeRole });
+                    setIsModalOpen(false);
+                    setFormData({ ...formData, time: '', payment: PAYMENTS[0], voucherCode: '', notes: '' });
+                } catch (error) {
+                    console.error("Chyba uložení:", error);
+                }
+            };
+
+            const handleDelete = async (id) => {
+                if (!user) return;
+                if (window.confirm("Opravdu smazat tento záznam?")) {
+                    await deleteDoc(doc(db, 'barber_records', id));
+                }
+            };
+
+            const toggleLockMonth = async () => {
+                if (!user || !isAdmin) return;
+                await setDoc(doc(db, 'barber_settings', selectedMonth), { locked: !isMonthLocked }, { merge: true });
+            };
+
+            const formatDate = (dateString) => {
+                if (!dateString) return '';
+                const [year, month, day] = dateString.split('-');
+                return `${day}.${month}.${year}`;
+            };
+
+            // --- OBRAZOVKA PŘIHLÁŠENÍ ---
+            if (!isAppUnlocked) {
+                const requiresPin = selectedLoginRole === 'Admin (Majitel)' || selectedLoginRole === 'Účetní';
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+                        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-md border border-gray-100">
+                            <div className="text-center">
+                                <div className="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center font-bold text-3xl mx-auto mb-4">✂️</div>
+                                <h2 className="text-3xl font-extrabold text-gray-900">Vstup do systému</h2>
+                                <p className="mt-2 text-gray-500">Vyberte, kdo zrovna pracuje</p>
+                            </div>
+                            <form className="mt-8 space-y-6" onSubmit={handleEasyLogin}>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Vaše role</label>
+                                    <select value={selectedLoginRole} onChange={(e) => { setSelectedLoginRole(e.target.value); setPinInput(''); setLoginError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-amber-500 focus:border-amber-500 text-lg font-medium">
+                                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                                {requiresPin && (
+                                    <div className="animate-fade-in">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">PIN Kód</label>
+                                        <input type="password" required maxLength="4" pattern="[0-9]*" inputMode="numeric" className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-amber-500 focus:border-amber-500 text-center text-2xl tracking-widest" placeholder="••••" value={pinInput} onChange={(e) => setPinInput(e.target.value)} />
+                                    </div>
+                                )}
+                                {loginError && <p className="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded">{loginError}</p>}
+                                <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent text-lg font-bold rounded-md text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 shadow-md transition-all">
+                                    Vstoupit do aplikace
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- HLAVNÍ APLIKACE ---
+            return (
+                <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-12">
+                    <header className="bg-slate-900 text-white shadow-md">
+                        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center font-bold text-xl">✂️</div>
+                                <h1 className="text-2xl font-bold tracking-tight">Barber Systém</h1>
+                            </div>
+                            <div className="flex items-center gap-4 bg-slate-800 p-2 rounded-lg border border-slate-700">
+                                <span className="text-xs text-slate-400 uppercase tracking-wider">Přihlášen jako:</span>
+                                <span className="text-amber-400 font-semibold">{activeRole}</span>
+                                <div className="h-4 w-px bg-slate-600 mx-2"></div>
+                                <button onClick={() => {setIsAppUnlocked(false); setPinInput('');}} className="text-sm text-slate-300 hover:text-white underline font-medium">Odhlásit</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-500 mb-1">Vyberte měsíc</label>
+                                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 px-3 text-base focus:border-amber-500 focus:ring-amber-500 sm:text-sm font-semibold cursor-pointer" />
+                                </div>
+                                {isAdmin && (
+                                    <div className="mt-6">
+                                        <button onClick={toggleLockMonth} className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors shadow-sm ${isMonthLocked ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'}`}>
+                                            {isMonthLocked ? '🔒 Měsíc Uzamčen (Odemknout)' : '🔓 Měsíc Otevřen (Zamknout)'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
+                                <button onClick={() => setIsModalOpen(true)} className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 transform hover:scale-105">
+                                    <span className="text-xl leading-none">+</span> Nový zákazník
+                                </button>
+                            )}
+                        </div>
+
+                        {isBarber && isMonthLocked ? (
+                            <div className="bg-red-50 text-red-600 p-12 rounded-xl text-center border border-red-100 shadow-sm">
+                                <div className="text-5xl mb-4">🔒</div>
+                                <h2 className="text-3xl font-bold mb-2">Tento měsíc je uzavřen</h2>
+                                <p className="text-lg">Výkazy byly předány účetnímu. Pro úpravy kontaktujte majitele.</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col lg:flex-row gap-8">
+                                <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-slate-50">
+                                                <tr>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Datum a Čas</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Kadeřník</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Služba</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Platba</th>
+                                                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Cena</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Poznámky</th>
+                                                    {isAdmin && <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Akce</th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-100">
+                                                {filteredRecords.length === 0 ? (
+                                                    <tr><td colSpan="7" className="px-6 py-16 text-center text-gray-400 text-lg">V tomto měsíci nejsou zatím žádné záznamy.</td></tr>
+                                                ) : (
+                                                    filteredRecords.map((record) => (
+                                                        <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatDate(record.date)} <span className="text-gray-400 ml-2">{record.time}</span></td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{record.barber}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{record.service}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-100 text-red-800' : ''} ${record.payment === 'KARTA' || record.payment === 'QR' ? 'bg-green-100 text-green-800' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-100 text-purple-800' : ''}`}>{record.payment}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right text-lg">{record.price} Kč</td>
+                                                            <td className="px-6 py-4 text-sm text-gray-500">
+                                                                {record.payment === 'POUKAZ' && <span className="inline-block bg-purple-50 border border-purple-200 px-2 py-0.5 rounded text-purple-700 font-bold mb-1">Poukaz: {record.voucherCode}</span>}
+                                                                <div className="truncate max-w-xs" title={record.notes}>{record.notes}</div>
+                                                            </td>
+                                                            {isAdmin && (
+                                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                                    <button onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded transition-colors">Smazat</button>
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div className="w-full lg:w-80 flex flex-col gap-4">
+                                    <div className="bg-slate-900 rounded-xl shadow-xl border border-slate-800 overflow-hidden text-white sticky top-6">
+                                        <div className="p-5 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+                                            <h3 className="font-bold text-lg">Souhrn měsíce</h3>
+                                            <span className="bg-slate-700 px-2 py-1 rounded text-xs font-mono text-slate-300">{selectedMonth}</span>
+                                        </div>
+                                        <div className="p-6">
+                                            <div className="mb-6 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                                                <p className="text-slate-400 text-sm mb-1 uppercase tracking-wider font-semibold">Celková tržba</p>
+                                                <p className="text-4xl font-bold text-amber-400">{totals.total.toLocaleString()} <span className="text-xl text-amber-500/70">Kč</span></p>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center pb-3 border-b border-slate-700/50"><span className="text-slate-300 flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]"></span> Hotovost</span><span className="font-bold text-lg">{totals.cash.toLocaleString()} Kč</span></div>
+                                                <div className="flex justify-between items-center pb-3 border-b border-slate-700/50"><span className="text-slate-300 flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></span> QR platby</span><span className="font-bold text-lg">{totals.qr.toLocaleString()} Kč</span></div>
+                                                <div className="flex justify-between items-center pb-3 border-b border-slate-700/50"><span className="text-slate-300 flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.6)]"></span> Poukazy</span><span className="font-bold text-lg">{totals.voucher.toLocaleString()} Kč</span></div>
+                                                <div className="flex justify-between items-center pt-2"><span className="text-slate-400 font-medium">Počet služeb celkem</span><span className="font-bold text-xl bg-amber-500 text-slate-900 px-3 py-1 rounded-md">{totals.count}</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {isModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm transition-opacity">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
+                                <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center">
+                                    <h3 className="text-xl font-bold flex items-center gap-2"><span>✂️</span> Nový zákazník</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white text-3xl leading-none">&times;</button>
+                                </div>
+                                <form onSubmit={handleSaveRecord} className="p-6 space-y-5">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-sm font-bold text-gray-700 mb-1">Datum *</label><input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 px-3 border" /></div>
+                                        <div><label className="block text-sm font-bold text-gray-700 mb-1">Čas *</label><input required type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 px-3 border" /></div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Kadeřník</label>
+                                        <select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 px-3 bg-slate-50 border">
+                                            <option>Kadeřník 1</option><option>Kadeřník 2</option><option>Admin (Majitel)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Služba *</label>
+                                        <select value={formData.service} onChange={handleServiceChange} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 px-3 font-medium border">
+                                            {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name} ({s.price} Kč)</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-2">Metoda platby *</label>
+                                        <div className="flex bg-gray-100 p-1.5 rounded-lg border border-gray-200">
+                                            {PAYMENTS.map(pay => (
+                                                <button key={pay} type="button" onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${formData.payment === pay ? 'bg-white shadow-md text-amber-600 border border-gray-200' : 'text-gray-500 hover:text-gray-800'}`}>{pay}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {formData.payment === 'POUKAZ' && (
+                                        <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 shadow-inner animate-fade-in">
+                                            <label className="block text-sm font-bold text-purple-900 mb-2">Číslo poukazu (Vouchéru) *</label>
+                                            <input required type="text" placeholder="Např. 15, 24, VCH-123" value={formData.voucherCode} onChange={e => setFormData({...formData, voucherCode: e.target.value})} className="w-full border-purple-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 bg-white py-2 px-3 text-lg font-mono placeholder-purple-200 border" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Poznámky</label>
+                                        <input type="text" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Volitelná poznámka..." className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 px-3 border" />
+                                    </div>
+                                    <div className="pt-6 flex gap-3 border-t border-gray-100">
+                                        <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-bold transition-colors">Zrušit</button>
+                                        <button type="submit" className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold shadow-md transition-all">Uložit záznam</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* SIDEBAR - SOUHRN */}
-            <div className="w-full lg:w-80 flex flex-col gap-4">
-              <div className="bg-slate-900 rounded-xl shadow-xl border border-slate-800 overflow-hidden text-white sticky top-6">
-                <div className="p-5 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Souhrn měsíce</h3>
-                  <span className="bg-slate-700 px-2 py-1 rounded text-xs font-mono text-slate-300">{selectedMonth}</span>
                 </div>
-                <div className="p-6">
-                  <div className="mb-6 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
-                    <p className="text-slate-400 text-sm mb-1 uppercase tracking-wider font-semibold">Celková tržba</p>
-                    <p className="text-4xl font-bold text-amber-400">{totals.total.toLocaleString()} <span className="text-xl text-amber-500/70">Kč</span></p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center pb-3 border-b border-slate-700/50">
-                      <span className="text-slate-300 flex items-center gap-3 font-medium">
-                        <span className="w-3 h-3 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]"></span> Hotovost
-                      </span>
-                      <span className="font-bold text-lg">{totals.cash.toLocaleString()} Kč</span>
-                    </div>
-                    <div className="flex justify-between items-center pb-3 border-b border-slate-700/50">
-                      <span className="text-slate-300 flex items-center gap-3 font-medium">
-                        <span className="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></span> QR platby
-                      </span>
-                      <span className="font-bold text-lg">{totals.qr.toLocaleString()} Kč</span>
-                    </div>
-                    <div className="flex justify-between items-center pb-3 border-b border-slate-700/50">
-                      <span className="text-slate-300 flex items-center gap-3 font-medium">
-                        <span className="w-3 h-3 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.6)]"></span> Poukazy
-                      </span>
-                      <span className="font-bold text-lg">{totals.voucher.toLocaleString()} Kč</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2">
-                      <span className="text-slate-400 font-medium">Počet služeb celkem</span>
-                      <span className="font-bold text-xl bg-amber-500 text-slate-900 px-3 py-1 rounded-md">{totals.count}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            );
+        }
 
-          </div>
-        )}
-      </main>
-
-      {/* MODAL PRO PŘIDÁNÍ ZÁZNAMU */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm transition-opacity">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
-            <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center">
-              <h3 className="text-xl font-bold flex items-center gap-2"><span>✂️</span> Nový zákazník</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white text-3xl leading-none">&times;</button>
-            </div>
-            
-            <form onSubmit={handleSaveRecord} className="p-6 space-y-5">
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Datum *</label>
-                  <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Čas *</label>
-                  <input required type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Kadeřník</label>
-                <select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 bg-slate-50">
-                  <option>Kadeřník 1</option>
-                  <option>Kadeřník 2</option>
-                  <option>Admin (Majitel)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Služba *</label>
-                <select value={formData.service} onChange={handleServiceChange} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2 font-medium">
-                  {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name} ({s.price} Kč)</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Metoda platby *</label>
-                <div className="flex bg-gray-100 p-1.5 rounded-lg border border-gray-200">
-                  {PAYMENTS.map(pay => (
-                    <button
-                      key={pay}
-                      type="button"
-                      onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})}
-                      className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
-                        formData.payment === pay 
-                        ? 'bg-white shadow-md text-amber-600 border border-gray-200' 
-                        : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      {pay}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Podmíněné pole pro číslo poukazu */}
-              {formData.payment === 'POUKAZ' && (
-                <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 shadow-inner">
-                  <label className="block text-sm font-bold text-purple-900 mb-2">Číslo poukazu (Vouchéru) *</label>
-                  <input 
-                    required 
-                    type="text" 
-                    placeholder="Např. 15, 24, VCH-123"
-                    value={formData.voucherCode} 
-                    onChange={e => setFormData({...formData, voucherCode: e.target.value})} 
-                    className="w-full border-purple-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 bg-white py-2 text-lg font-mono placeholder-purple-200" 
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Poznámky</label>
-                <input type="text" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Volitelná poznámka..." className="w-full border-gray-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 py-2" />
-              </div>
-
-              <div className="pt-6 flex gap-3 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-bold transition-colors">
-                  Zrušit
-                </button>
-                <button type="submit" className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold shadow-md transition-all">
-                  Uložit záznam
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
+        // Vykreslení
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
