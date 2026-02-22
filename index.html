@@ -87,6 +87,14 @@
         const PAYMENTS = ['HOTOVOST', 'QR', 'POUKAZ'];
         const ROLES = ['Admin (Majitel)', 'Kadeřník 1', 'Kadeřník 2', 'Účetní'];
 
+        const getDefaultDateTime = () => {
+            const now = new Date();
+            const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const roundedMinutes = Math.floor(now.getMinutes() / 15) * 15;
+            const time = `${String(now.getHours()).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+            return { date, time };
+        };
+
         function App() {
             const [user, setUser] = useState(null);
             const [records, setRecords] = useState([]);
@@ -99,9 +107,11 @@
             
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null);
+            
+            const initialDT = getDefaultDateTime();
             const [formData, setFormData] = useState({
-                date: '',
-                time: '',
+                date: initialDT.date,
+                time: initialDT.time,
                 service: SERVICES[0].name,
                 price: SERVICES[0].price,
                 payment: PAYMENTS[0],
@@ -204,8 +214,9 @@
             const closeModal = () => {
                 setIsModalOpen(false);
                 setEditingId(null);
+                const dt = getDefaultDateTime();
                 setFormData({
-                    date: '', time: '', service: SERVICES[0].name, price: SERVICES[0].price, 
+                    date: dt.date, time: dt.time, service: SERVICES[0].name, price: SERVICES[0].price, 
                     payment: PAYMENTS[0], voucherCode: '', notes: '', 
                     barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1'
                 });
@@ -316,7 +327,8 @@
                             </div>
                             {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
                                 <button onClick={() => {
-                                    setFormData({ date: '', time: '', service: SERVICES[0].name, price: SERVICES[0].price, payment: PAYMENTS[0], voucherCode: '', notes: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1' });
+                                    const dt = getDefaultDateTime();
+                                    setFormData({ date: dt.date, time: dt.time, service: SERVICES[0].name, price: SERVICES[0].price, payment: PAYMENTS[0], voucherCode: '', notes: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1' });
                                     setIsModalOpen(true);
                                 }} className="bg-brand-gold text-white px-6 py-3 rounded-lg font-bold shadow-md transition-all hover:opacity-90 flex items-center gap-2 transform hover:scale-105">
                                     <span className="text-xl leading-none">+</span> Nový zákazník
