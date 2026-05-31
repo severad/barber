@@ -179,15 +179,29 @@
                 return records.filter(record => record.date.substring(0, 7) === selectedMonth);
             }, [records, selectedMonth, isMonthLocked, isBarber]);
 
+            // Přepracované statistiky pro výpočet podílů kadeřníků
             const totals = useMemo(() => {
-                return filteredRecords.reduce((acc, curr) => {
-                    acc.total += Number(curr.price) || 0;
-                    if (curr.payment === 'HOTOVOST') acc.cash += Number(curr.price) || 0;
-                    if (curr.payment === 'QR') acc.qr += Number(curr.price) || 0;
-                    if (curr.payment === 'POUKAZ') acc.voucher += Number(curr.price) || 0;
-                    acc.count += 1;
-                    return acc;
-                }, { total: 0, cash: 0, qr: 0, voucher: 0, count: 0 });
+                const result = { total: 0, cash: 0, qr: 0, voucher: 0, count: 0, byBarber: {} };
+                
+                filteredRecords.forEach(curr => {
+                    const price = Number(curr.price) || 0;
+                    const barber = curr.barber || 'Neznámý';
+
+                    // Celkové součty
+                    result.total += price;
+                    result.count += 1;
+                    if (curr.payment === 'HOTOVOST') result.cash += price;
+                    if (curr.payment === 'QR') result.qr += price;
+                    if (curr.payment === 'POUKAZ') result.voucher += price;
+
+                    // Součty na jednotlivé kadeřníky
+                    if (!result.byBarber[barber]) {
+                        result.byBarber[barber] = { total: 0, count: 0 };
+                    }
+                    result.byBarber[barber].total += price;
+                    result.byBarber[barber].count += 1;
+                });
+                return result;
             }, [filteredRecords]);
 
             const handleServiceChange = (e) => {
@@ -398,15 +412,42 @@
                                             <span className="bg-brand-dark px-2 py-1 rounded text-xs font-mono text-brand-gold">{selectedMonth}</span>
                                         </div>
                                         <div className="p-6">
-                                            <div className="mb-6 bg-brand-brown/50 p-4 rounded-lg border border-brand-brown">
-                                                <p className="text-brand-gray text-sm mb-1 uppercase tracking-wider font-semibold">Celková tržba</p>
-                                                <p className="text-4xl font-bold text-brand-gold">{totals.total.toLocaleString()} <span className="text-xl opacity-70">Kč</span></p>
-                                            </div>
+                                            {/* Zobrazení celkových čísel jen pro Admina/Účetní */}
+                                            {(!isBarber) && (
+                                                <div className="mb-6 bg-brand-brown/50 p-4 rounded-lg border border-brand-brown">
+                                                    <p className="text-brand-gray text-sm mb-1 uppercase tracking-wider font-semibold">Celková tržba Salonu</p>
+                                                    <p className="text-4xl font-bold text-brand-gold">{totals.total.toLocaleString()} <span className="text-xl opacity-70">Kč</span></p>
+                                                    
+                                                    <div className="mt-4 pt-4 border-t border-brand-brown/50 space-y-2">
+                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Hotovost</span><span className="font-bold text-white">{totals.cash.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">QR platby</span><span className="font-bold text-white">{totals.qr.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Poukazy</span><span className="font-bold text-white">{totals.voucher.toLocaleString()} Kč</span></div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Výpis na kadeřníky */}
                                             <div className="space-y-4">
-                                                <div className="flex justify-between items-center pb-3 border-b border-brand-brown"><span className="flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-red-400"></span> Hotovost</span><span className="font-bold text-lg text-white">{totals.cash.toLocaleString()} Kč</span></div>
-                                                <div className="flex justify-between items-center pb-3 border-b border-brand-brown"><span className="flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-green-400"></span> QR platby</span><span className="font-bold text-lg text-white">{totals.qr.toLocaleString()} Kč</span></div>
-                                                <div className="flex justify-between items-center pb-3 border-b border-brand-brown"><span className="flex items-center gap-3 font-medium"><span className="w-3 h-3 rounded-full bg-purple-400"></span> Poukazy</span><span className="font-bold text-lg text-white">{totals.voucher.toLocaleString()} Kč</span></div>
-                                                <div className="flex justify-between items-center pt-2"><span className="text-brand-gray font-medium">Počet služeb celkem</span><span className="font-bold text-xl bg-brand-gold text-brand-dark px-3 py-1 rounded-md">{totals.count}</span></div>
+                                                <h4 className="text-sm uppercase tracking-wider font-bold text-brand-gold mb-2">{isBarber ? 'Tvoje výsledky' : 'Rozpad na kadeřníky'}</h4>
+                                                
+                                                {Object.entries(totals.byBarber).map(([barberName, data]) => {
+                                                    // Kadeřník vidí jen sám sebe
+                                                    if (isBarber && barberName !== activeRole) return null;
+
+                                                    return (
+                                                        <div key={barberName} className="flex justify-between items-center pb-3 border-b border-brand-brown">
+                                                            <div>
+                                                                <span className="block text-brand-light font-medium">{barberName}</span>
+                                                                <span className="text-xs text-brand-gray">{data.count} služeb</span>
+                                                            </div>
+                                                            <span className="font-bold text-lg text-white">{data.total.toLocaleString()} Kč</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                
+                                                {Object.keys(totals.byBarber).length === 0 && (
+                                                    <p className="text-brand-gray text-sm italic">Žádné tržby k zobrazení.</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -443,7 +484,7 @@
                                         <label className="block text-sm font-bold text-brand-brown mb-2">Metoda platby *</label>
                                         <div className="flex bg-brand-light p-1.5 rounded-lg border border-gray-200">
                                             {PAYMENTS.map(pay => (
-                                                <button key={pay} type="button" onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${formData.payment === pay ? 'bg-white shadow-md text-brand-gold border border-gray-200' : 'text-brand-gray hover:text-brand-dark'}`}>{pay}</button>
+                                                <button key={pay} type="button" onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${formData.payment === pay ? 'bg-white shadow-md text-brand-gold border border-gray-200' : 'text-gray-500 hover:text-brand-dark'}`}>{pay}</button>
                                             ))}
                                         </div>
                                     </div>
