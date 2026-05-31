@@ -422,6 +422,7 @@
                                                         <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Hotovost</span><span className="font-bold text-white">{totals.cash.toLocaleString()} Kč</span></div>
                                                         <div className="flex justify-between items-center text-sm"><span className="text-brand-light">QR platby</span><span className="font-bold text-white">{totals.qr.toLocaleString()} Kč</span></div>
                                                         <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Poukazy</span><span className="font-bold text-white">{totals.voucher.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t border-brand-brown/30"><span className="text-brand-gray font-medium">Služby celkem</span><span className="font-bold text-brand-gold">{totals.count}</span></div>
                                                     </div>
                                                 </div>
                                             )}
@@ -435,12 +436,17 @@
                                                     if (isBarber && barberName !== activeRole) return null;
 
                                                     return (
-                                                        <div key={barberName} className="flex justify-between items-center pb-3 border-b border-brand-brown">
-                                                            <div>
-                                                                <span className="block text-brand-light font-medium">{barberName}</span>
-                                                                <span className="text-xs text-brand-gray">{data.count} služeb</span>
+                                                        <div key={barberName} className="pb-4 border-b border-brand-brown last:border-0 last:pb-0">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="block text-brand-light font-bold text-lg">{barberName}</span>
+                                                                <span className="font-bold text-xl text-white">{data.total.toLocaleString()} Kč</span>
                                                             </div>
-                                                            <span className="font-bold text-lg text-white">{data.total.toLocaleString()} Kč</span>
+                                                            <div className="grid grid-cols-2 gap-2 text-xs bg-brand-dark/50 p-2 rounded border border-brand-brown/30">
+                                                                <div className="flex justify-between"><span className="text-brand-gray">Hotovost:</span><span className="text-white font-medium">{data.cash.toLocaleString()} Kč</span></div>
+                                                                <div className="flex justify-between"><span className="text-brand-gray">QR:</span><span className="text-white font-medium">{data.qr.toLocaleString()} Kč</span></div>
+                                                                <div className="flex justify-between"><span className="text-brand-gray">Poukaz:</span><span className="text-white font-medium">{data.voucher.toLocaleString()} Kč</span></div>
+                                                                <div className="flex justify-between"><span className="text-brand-gray">Služeb:</span><span className="text-brand-gold font-medium">{data.count}</span></div>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}
