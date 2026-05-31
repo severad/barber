@@ -194,12 +194,16 @@
                     if (curr.payment === 'QR') result.qr += price;
                     if (curr.payment === 'POUKAZ') result.voucher += price;
 
-                    // Součty na jednotlivé kadeřníky
+                    // Součty na jednotlivé kadeřníky (OPRAVA ZDE: přidány chybějící proměnné)
                     if (!result.byBarber[barber]) {
-                        result.byBarber[barber] = { total: 0, count: 0 };
+                        result.byBarber[barber] = { total: 0, cash: 0, qr: 0, voucher: 0, count: 0 };
                     }
                     result.byBarber[barber].total += price;
                     result.byBarber[barber].count += 1;
+                    
+                    if (curr.payment === 'HOTOVOST') result.byBarber[barber].cash += price;
+                    if (curr.payment === 'QR') result.byBarber[barber].qr += price;
+                    if (curr.payment === 'POUKAZ') result.byBarber[barber].voucher += price;
                 });
                 return result;
             }, [filteredRecords]);
