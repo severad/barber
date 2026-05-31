@@ -268,7 +268,23 @@
             const handleDelete = async (id) => {
                 if (!user) return;
                 if (window.confirm("Opravdu smazat tento záznam? Tuto akci nelze vrátit.")) {
-                    await deleteDoc(doc(db, 'barber_records', id));
+                    // 1. Najdeme záznam, který chceme smazat
+                    const recordToDelete = records.find(r => r.id === id);
+                    if (recordToDelete) {
+                        try {
+                            // 2. Nejprve záznam zkopírujeme do nové "složky" (logu smazaných)
+                            await addDoc(collection(db, 'deleted_records'), {
+                                ...recordToDelete,
+                                deletedAt: new Date().toISOString(), // Přidáme čas smazání
+                                deletedBy: activeRole,               // Přidáme, kdo to smazal
+                                originalId: id
+                            });
+                            // 3. Poté ho teprve nenávratně smažeme z hlavní aplikace
+                            await deleteDoc(doc(db, 'barber_records', id));
+                        } catch (error) { 
+                            console.error("Chyba při mazání:", error); 
+                        }
+                    }
                 }
             };
 
