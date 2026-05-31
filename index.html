@@ -178,10 +178,6 @@
             const isAdmin = activeRole === 'Admin (Majitel)';
             const isMonthLocked = settings[selectedMonth]?.locked === true;
 
-            useEffect(() => {
-                if (isBarber && selectedMonth !== currentMonthStr) setSelectedMonth(currentMonthStr);
-            }, [isBarber, selectedMonth, currentMonthStr]);
-
             const handleEasyLogin = (e) => {
                 e.preventDefault();
                 setLoginError('');
@@ -193,9 +189,8 @@
             };
 
             const filteredRecords = useMemo(() => {
-                if (isBarber && isMonthLocked) return [];
                 return records.filter(record => record.date.substring(0, 7) === selectedMonth);
-            }, [records, selectedMonth, isMonthLocked, isBarber]);
+            }, [records, selectedMonth]);
 
             const totals = useMemo(() => {
                 const result = { total: 0, cash: 0, qr: 0, voucher: 0, count: 0, byBarber: {} };
@@ -363,8 +358,8 @@
                                 <div className="flex items-center gap-4 w-full sm:w-auto">
                                     <div className="flex-1 sm:flex-none">
                                         <label className="block text-xs font-bold text-brand-gray uppercase mb-1 ml-1">Měsíc</label>
-                                        <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} disabled={isBarber}
-                                            className={`w-full sm:w-auto rounded-xl py-2.5 px-4 text-sm font-bold outline-none transition-all ${isBarber ? 'bg-gray-100/50 text-brand-gray cursor-not-allowed' : 'bg-white shadow-sm border border-white/80 focus:ring-2 focus:ring-brand-gold'}`} />
+                                        <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+                                            className="w-full sm:w-auto rounded-xl py-2.5 px-4 text-sm font-bold outline-none transition-all bg-white shadow-sm border border-white/80 focus:ring-2 focus:ring-brand-gold" />
                                     </div>
                                     {isAdmin && (
                                         <button onClick={toggleLockMonth} className={`mt-5 px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${isMonthLocked ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
@@ -381,102 +376,102 @@
                                 )}
                             </div>
 
-                            {/* Uzamčeno Alert */}
-                            {isBarber && isMonthLocked ? (
-                                <div className="bg-white/60 backdrop-blur-xl border border-white/50 p-12 rounded-[2rem] shadow-glass text-center animate-slide-up">
-                                    <div className="text-6xl mb-4 opacity-50">🔒</div>
-                                    <h2 className="text-2xl font-extrabold mb-2 text-brand-dark">Tento měsíc je uzavřen</h2>
-                                    <p className="text-brand-gray font-medium">Data byla předána účetní. Pro úpravy kontaktujte majitele.</p>
+                            {/* Uzamčeno Alert (Nyní jen jako pruh nahoře) */}
+                            {isMonthLocked && !isAdmin && (
+                                <div className="bg-red-50/80 backdrop-blur-xl border border-red-100 p-5 rounded-[1.5rem] shadow-sm flex items-center gap-4 animate-fade-in">
+                                    <div className="text-3xl">🔒</div>
+                                    <div>
+                                        <h3 className="font-extrabold text-red-800 text-lg">Tento měsíc je uzavřen</h3>
+                                        <p className="text-red-600 font-medium text-sm">Data si můžeš prohlížet, ale pro přidání či úpravy kontaktuj majitele.</p>
+                                    </div>
                                 </div>
-                            ) : (
-                                <>
-                                    {/* MOBILNÍ ZOBRAZENÍ: KARTY (Skryté na Desktopu) */}
-                                    <div className="md:hidden flex flex-col gap-4">
-                                        {filteredRecords.length === 0 ? (
-                                            <div className="text-center p-8 bg-white/50 rounded-3xl border border-white/50 text-brand-gray font-medium">Zatím žádné záznamy.</div>
-                                        ) : (
-                                            filteredRecords.map(record => (
-                                                <div key={record.id} className="bg-white/80 backdrop-blur-xl border border-white/80 p-5 rounded-[1.5rem] shadow-sm flex flex-col gap-3 animate-slide-up">
-                                                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="bg-brand-gold/10 text-brand-gold px-2.5 py-1 rounded-lg text-sm font-extrabold">{formatDate(record.date)}</div>
-                                                            <div className="text-brand-gray font-bold text-sm">{record.time}</div>
-                                                        </div>
-                                                        <div className="text-lg font-extrabold text-brand-dark">{record.price} Kč</div>
-                                                    </div>
-                                                    
-                                                    <div>
-                                                        <div className="font-bold text-brand-dark">{record.service}</div>
-                                                        <div className="text-sm font-medium text-brand-gray mt-1 flex items-center gap-2">
-                                                            <span>✂️ {record.barber}</span>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    <div className="flex justify-between items-end pt-2">
-                                                        <div>
-                                                            <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600' : ''}`}>
-                                                                {record.payment} {record.payment === 'POUKAZ' && `(#${record.voucherCode})`}
-                                                            </span>
-                                                            {record.notes && <div className="text-xs text-brand-gray mt-2 italic">"{record.notes}"</div>}
-                                                        </div>
-                                                        
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 px-3 py-1.5 rounded-xl text-sm font-bold">Upravit</button>
-                                                            {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 px-3 py-1.5 rounded-xl text-sm font-bold">Smazat</button>}
-                                                        </div>
-                                                    </div>
+                            )}
+
+                            {/* MOBILNÍ ZOBRAZENÍ: KARTY (Skryté na Desktopu) */}
+                            <div className="md:hidden flex flex-col gap-4">
+                                {filteredRecords.length === 0 ? (
+                                    <div className="text-center p-8 bg-white/50 rounded-3xl border border-white/50 text-brand-gray font-medium">Zatím žádné záznamy.</div>
+                                ) : (
+                                    filteredRecords.map(record => (
+                                        <div key={record.id} className="bg-white/80 backdrop-blur-xl border border-white/80 p-5 rounded-[1.5rem] shadow-sm flex flex-col gap-3 animate-slide-up">
+                                            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="bg-brand-gold/10 text-brand-gold px-2.5 py-1 rounded-lg text-sm font-extrabold">{formatDate(record.date)}</div>
+                                                    <div className="text-brand-gray font-bold text-sm">{record.time}</div>
                                                 </div>
+                                                <div className="text-lg font-extrabold text-brand-dark">{record.price} Kč</div>
+                                            </div>
+                                            
+                                            <div>
+                                                <div className="font-bold text-brand-dark">{record.service}</div>
+                                                <div className="text-sm font-medium text-brand-gray mt-1 flex items-center gap-2">
+                                                    <span>✂️ {record.barber}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex justify-between items-end pt-2">
+                                                <div>
+                                                    <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600' : ''}`}>
+                                                        {record.payment} {record.payment === 'POUKAZ' && `(#${record.voucherCode})`}
+                                                    </span>
+                                                    {record.notes && <div className="text-xs text-brand-gray mt-2 italic">"{record.notes}"</div>}
+                                                </div>
+                                                
+                                                <div className="flex gap-2">
+                                                    {!(isMonthLocked && !isAdmin) && <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 px-3 py-1.5 rounded-xl text-sm font-bold">Upravit</button>}
+                                                    {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 px-3 py-1.5 rounded-xl text-sm font-bold">Smazat</button>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* DESKTOP ZOBRAZENÍ: TABULKA (Skryté na Mobilu) */}
+                            <div className="hidden md:block bg-white/70 backdrop-blur-xl border border-white/50 rounded-[2rem] shadow-glass overflow-hidden">
+                                <table className="min-w-full text-left border-collapse">
+                                    <thead className="bg-white/40 border-b border-white/50 backdrop-blur-md">
+                                        <tr>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Datum a Čas</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Kadeřník</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Služba</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Platba</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Cena</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Poznámka</th>
+                                            <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100/50">
+                                        {filteredRecords.length === 0 ? (
+                                            <tr><td colSpan="7" className="px-6 py-16 text-center text-brand-gray font-medium">V tomto měsíci nejsou zatím žádné záznamy.</td></tr>
+                                        ) : (
+                                            filteredRecords.map((record) => (
+                                                <tr key={record.id} className="hover:bg-white/50 transition-colors">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm"><span className="font-bold text-brand-dark">{formatDate(record.date)}</span> <span className="text-brand-gray font-medium ml-2">{record.time}</span></td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-brown">{record.barber}</td>
+                                                    <td className="px-6 py-4 text-sm font-semibold text-brand-dark max-w-[250px] leading-snug">{record.service}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600 border border-red-100' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600 border border-green-100' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600 border border-purple-100' : ''}`}>
+                                                            {record.payment}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-brand-dark text-right text-base">{record.price} Kč</td>
+                                                    <td className="px-6 py-4 text-sm text-brand-gray max-w-[200px]">
+                                                        {record.payment === 'POUKAZ' && <span className="block text-xs font-bold text-purple-600 mb-0.5">#{record.voucherCode}</span>}
+                                                        <span className="truncate block">{record.notes}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            {!(isMonthLocked && !isAdmin) && <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 hover:bg-brand-gold/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Upravit</button>}
+                                                            {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Smazat</button>}
+                                                        </div>
+                                                    </td>
+                                                </tr>
                                             ))
                                         )}
-                                    </div>
-
-                                    {/* DESKTOP ZOBRAZENÍ: TABULKA (Skryté na Mobilu) */}
-                                    <div className="hidden md:block bg-white/70 backdrop-blur-xl border border-white/50 rounded-[2rem] shadow-glass overflow-hidden">
-                                        <table className="min-w-full text-left border-collapse">
-                                            <thead className="bg-white/40 border-b border-white/50 backdrop-blur-md">
-                                                <tr>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Datum a Čas</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Kadeřník</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Služba</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Platba</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Cena</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Poznámka</th>
-                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Akce</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100/50">
-                                                {filteredRecords.length === 0 ? (
-                                                    <tr><td colSpan="7" className="px-6 py-16 text-center text-brand-gray font-medium">V tomto měsíci nejsou zatím žádné záznamy.</td></tr>
-                                                ) : (
-                                                    filteredRecords.map((record) => (
-                                                        <tr key={record.id} className="hover:bg-white/50 transition-colors">
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm"><span className="font-bold text-brand-dark">{formatDate(record.date)}</span> <span className="text-brand-gray font-medium ml-2">{record.time}</span></td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-brown">{record.barber}</td>
-                                                            <td className="px-6 py-4 text-sm font-semibold text-brand-dark max-w-[250px] leading-snug">{record.service}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600 border border-red-100' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600 border border-green-100' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600 border border-purple-100' : ''}`}>
-                                                                    {record.payment}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-brand-dark text-right text-base">{record.price} Kč</td>
-                                                            <td className="px-6 py-4 text-sm text-brand-gray max-w-[200px]">
-                                                                {record.payment === 'POUKAZ' && <span className="block text-xs font-bold text-purple-600 mb-0.5">#{record.voucherCode}</span>}
-                                                                <span className="truncate block">{record.notes}</span>
-                                                            </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                                <div className="flex justify-end gap-2">
-                                                                    <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 hover:bg-brand-gold/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Upravit</button>
-                                                                    {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Smazat</button>}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </>
-                            )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         {/* Pravý panel: Dark Glass Souhrn */}
