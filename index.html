@@ -238,6 +238,17 @@
                 setIsModalOpen(true);
             };
 
+            const closeModal = () => {
+                setIsModalOpen(false);
+                setEditingId(null);
+            };
+
+            const handleServiceChange = (e) => {
+                const serviceName = e.target.value;
+                const service = SERVICES.find(s => s.name === serviceName);
+                setFormData({ ...formData, service: serviceName, price: service.price });
+            };
+
             const handleSaveRecord = async (e) => {
                 e.preventDefault();
                 if (!user) return;
