@@ -2,8 +2,12 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barber Systém</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jebley Barber Systém</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -18,22 +22,49 @@
                             brown: '#46342b',
                             light: '#f4ece4'
                         }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'glass': '0 8px 32px 0 rgba(21, 13, 7, 0.05)',
+                        'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
                     }
                 }
             }
         }
     </script>
+    
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
-        body { background-color: #f4ece4; font-family: ui-sans-serif, system-ui, sans-serif; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        body { 
+            background-color: #f4ece4; 
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+        /* Skrytí posuvníků pro čistší vzhled */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #90908f; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #b9925f; }
+        
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Dekorativní bloby na pozadí pro glassmorphism efekt */
+        .bg-blob-1 { position: fixed; top: -10%; left: -10%; width: 50vw; height: 50vw; border-radius: 50%; background: #b9925f; opacity: 0.15; filter: blur(100px); z-index: -1; pointer-events: none; }
+        .bg-blob-2 { position: fixed; bottom: -10%; right: -10%; width: 60vw; height: 60vw; border-radius: 50%; background: #46342b; opacity: 0.1; filter: blur(120px); z-index: -1; pointer-events: none; }
     </style>
 </head>
-<body>
+<body class="text-brand-dark antialiased selection:bg-brand-gold selection:text-white">
+    <div class="bg-blob-1"></div>
+    <div class="bg-blob-2"></div>
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
@@ -43,14 +74,14 @@
 
         const { useState, useEffect, useMemo } = React;
 
+        // --- STREAMING_CHUNK: Konfigurace a Data ---
         const firebaseConfig = {
             apiKey: "AIzaSyBf8IfMax0l5uvl9VdertYcK5ruVPBSvuE",
             authDomain: "barber-tabulky.firebaseapp.com",
             projectId: "barber-tabulky",
             storageBucket: "barber-tabulky.firebasestorage.app",
             messagingSenderId: "165152546039",
-            appId: "1:165152546039:web:19b8a86e8e215c883cc7f2",
-            measurementId: "G-PQ32GEK6QV"
+            appId: "1:165152546039:web:19b8a86e8e215c883cc7f2"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -58,10 +89,10 @@
         const db = getFirestore(app);
 
         const PASSWORDS = {
-            'Admin (Majitel)': 'Wm1yemxpbmE2OQ==',
-            'Kadeřník 1': 'QmFyYmVyMDE=',
-            'Kadeřník 2': 'QmFyYmVyMDI=',
-            'Účetní': 'VWN0bzEyMzQ='
+            'Admin (Majitel)': 'Wm1yemxpbmE2OQ==', // Zmrzlina69
+            'Kadeřník 1': 'QmFyYmVyMDE=',         // Barber01
+            'Kadeřník 2': 'QmFyYmVyMDI=',         // Barber02
+            'Účetní': 'VWN0bzEyMzQ='              // Ucto1234
         };
 
         const SERVICES = [
@@ -95,6 +126,7 @@
             return { date, time };
         };
 
+        // --- STREAMING_CHUNK: Hlavní Komponenta App ---
         function App() {
             const [user, setUser] = useState(null);
             const [records, setRecords] = useState([]);
@@ -108,16 +140,9 @@
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null);
             
-            const initialDT = getDefaultDateTime();
             const [formData, setFormData] = useState({
-                date: initialDT.date,
-                time: initialDT.time,
-                service: SERVICES[0].name,
-                price: SERVICES[0].price,
-                payment: PAYMENTS[0],
-                voucherCode: '',
-                notes: '',
-                barber: 'Kadeřník 1'
+                date: '', time: '', service: SERVICES[0].name, price: SERVICES[0].price, 
+                payment: PAYMENTS[0], voucherCode: '', notes: '', barber: 'Kadeřník 1'
             });
 
             const [isAppUnlocked, setIsAppUnlocked] = useState(false);
@@ -133,43 +158,36 @@
 
             useEffect(() => {
                 if (!user) return;
-
                 const recordsRef = collection(db, 'barber_records');
                 const unsubRecords = onSnapshot(recordsRef, (snapshot) => {
                     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    data.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+                    data.sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
                     setRecords(data);
                 });
-
                 const settingsRef = collection(db, 'barber_settings');
                 const unsubSettings = onSnapshot(settingsRef, (snapshot) => {
                     const data = {};
                     snapshot.docs.forEach(doc => { data[doc.id] = doc.data(); });
                     setSettings(data);
                 });
-
                 return () => { unsubRecords(); unsubSettings(); };
             }, [user]);
 
+            // --- STREAMING_CHUNK: Logika a Výpočty ---
             const isBarber = activeRole.includes('Kadeřník');
             const isAdmin = activeRole === 'Admin (Majitel)';
             const isMonthLocked = settings[selectedMonth]?.locked === true;
 
             useEffect(() => {
-                if (isBarber && selectedMonth !== currentMonthStr) {
-                    setSelectedMonth(currentMonthStr);
-                }
+                if (isBarber && selectedMonth !== currentMonthStr) setSelectedMonth(currentMonthStr);
             }, [isBarber, selectedMonth, currentMonthStr]);
 
             const handleEasyLogin = (e) => {
                 e.preventDefault();
                 setLoginError('');
-
                 if (btoa(pinInput) !== PASSWORDS[selectedLoginRole]) {
-                    setLoginError('Nesprávné heslo!'); 
-                    return;
+                    setLoginError('Nesprávné heslo!'); return;
                 }
-
                 setActiveRole(selectedLoginRole);
                 setIsAppUnlocked(true);
             };
@@ -179,28 +197,23 @@
                 return records.filter(record => record.date.substring(0, 7) === selectedMonth);
             }, [records, selectedMonth, isMonthLocked, isBarber]);
 
-            // Přepracované statistiky pro výpočet podílů kadeřníků
             const totals = useMemo(() => {
                 const result = { total: 0, cash: 0, qr: 0, voucher: 0, count: 0, byBarber: {} };
-                
                 filteredRecords.forEach(curr => {
                     const price = Number(curr.price) || 0;
                     const barber = curr.barber || 'Neznámý';
-
-                    // Celkové součty
+                    
                     result.total += price;
                     result.count += 1;
                     if (curr.payment === 'HOTOVOST') result.cash += price;
                     if (curr.payment === 'QR') result.qr += price;
                     if (curr.payment === 'POUKAZ') result.voucher += price;
 
-                    // Součty na jednotlivé kadeřníky (OPRAVA ZDE: přidány chybějící proměnné)
                     if (!result.byBarber[barber]) {
                         result.byBarber[barber] = { total: 0, cash: 0, qr: 0, voucher: 0, count: 0 };
                     }
                     result.byBarber[barber].total += price;
                     result.byBarber[barber].count += 1;
-                    
                     if (curr.payment === 'HOTOVOST') result.byBarber[barber].cash += price;
                     if (curr.payment === 'QR') result.byBarber[barber].qr += price;
                     if (curr.payment === 'POUKAZ') result.byBarber[barber].voucher += price;
@@ -208,36 +221,21 @@
                 return result;
             }, [filteredRecords]);
 
-            const handleServiceChange = (e) => {
-                const serviceName = e.target.value;
-                const service = SERVICES.find(s => s.name === serviceName);
-                setFormData({ ...formData, service: serviceName, price: service.price });
-            };
-
-            const openEditModal = (record) => {
-                setFormData({
-                    date: record.date,
-                    time: record.time,
-                    service: record.service,
-                    price: record.price,
-                    payment: record.payment,
-                    voucherCode: record.voucherCode || '',
-                    notes: record.notes || '',
-                    barber: record.barber
-                });
-                setEditingId(record.id);
-                setIsModalOpen(true);
-            };
-
-            const closeModal = () => {
-                setIsModalOpen(false);
-                setEditingId(null);
+            // --- STREAMING_CHUNK: Akce Formuláře ---
+            const openModalForNew = () => {
                 const dt = getDefaultDateTime();
                 setFormData({
                     date: dt.date, time: dt.time, service: SERVICES[0].name, price: SERVICES[0].price, 
-                    payment: PAYMENTS[0], voucherCode: '', notes: '', 
-                    barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1'
+                    payment: PAYMENTS[0], voucherCode: '', notes: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1'
                 });
+                setEditingId(null);
+                setIsModalOpen(true);
+            };
+
+            const openEditModal = (record) => {
+                setFormData({ ...record, voucherCode: record.voucherCode || '', notes: record.notes || '' });
+                setEditingId(record.id);
+                setIsModalOpen(true);
             };
 
             const handleSaveRecord = async (e) => {
@@ -246,15 +244,14 @@
                 if (formData.payment === 'POUKAZ' && !formData.voucherCode.trim()) {
                     alert("Při platbě poukazem je nutné zadat číslo poukazu!"); return;
                 }
-                
                 try {
                     if (editingId) {
                         await updateDoc(doc(db, 'barber_records', editingId), { ...formData, updatedBy: activeRole, updatedAt: new Date().toISOString() });
                     } else {
                         await addDoc(collection(db, 'barber_records'), { ...formData, createdAt: new Date().toISOString(), addedBy: activeRole });
                     }
-                    closeModal();
-                } catch (error) {}
+                    setIsModalOpen(false);
+                } catch (error) { console.error(error); }
             };
 
             const handleDelete = async (id) => {
@@ -275,28 +272,33 @@
                 return `${day}.${month}.${year}`;
             };
 
+            // --- STREAMING_CHUNK: Obrazovka Přihlášení (Glassmorphism) ---
             if (!isAppUnlocked) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center bg-brand-light py-12 px-4 sm:px-6 lg:px-8">
-                        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-md border border-gray-100">
+                    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative">
+                        <div className="max-w-md w-full space-y-8 bg-white/70 backdrop-blur-xl p-8 rounded-[2rem] shadow-glass border border-white/50 animate-fade-in z-10">
                             <div className="text-center flex flex-col items-center">
-                                <img src="https://jebley-barber.cz/images/logo.png" alt="Jebley Barber" className="h-20 mb-4 bg-brand-dark rounded-xl p-3" />
-                                <h2 className="text-3xl font-extrabold text-brand-dark">Vstup do systému</h2>
-                                <p className="mt-2 text-brand-gray">Vyberte, kdo zrovna pracuje</p>
+                                <div className="w-20 h-20 bg-brand-dark rounded-3xl flex items-center justify-center mb-6 shadow-xl transform rotate-3">
+                                    <img src="https://jebley-barber.cz/images/logo.png" alt="Jebley Barber" className="h-12 object-contain -rotate-3" />
+                                </div>
+                                <h2 className="text-3xl font-extrabold text-brand-dark tracking-tight">Vstup do systému</h2>
+                                <p className="mt-2 text-brand-gray font-medium">Jebley Barber Salon</p>
                             </div>
                             <form className="mt-8 space-y-6" onSubmit={handleEasyLogin}>
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-brown mb-2">Vaše role</label>
-                                    <select value={selectedLoginRole} onChange={(e) => { setSelectedLoginRole(e.target.value); setPinInput(''); setLoginError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-brand-gold focus:border-brand-gold text-lg font-medium">
-                                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                                    </select>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-brand-dark/70 mb-2 ml-1">Kdo se přihlašuje?</label>
+                                        <select value={selectedLoginRole} onChange={(e) => { setSelectedLoginRole(e.target.value); setPinInput(''); setLoginError(''); }} className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent text-lg font-semibold text-brand-dark outline-none transition-all appearance-none backdrop-blur-sm">
+                                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="animate-fade-in">
+                                        <label className="block text-sm font-bold text-brand-dark/70 mb-2 ml-1">Heslo</label>
+                                        <input type="password" required className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent text-center text-2xl tracking-widest outline-none transition-all backdrop-blur-sm" placeholder="••••••••" value={pinInput} onChange={(e) => setPinInput(e.target.value)} />
+                                    </div>
                                 </div>
-                                <div className="animate-fade-in">
-                                    <label className="block text-sm font-medium text-brand-brown mb-2">Heslo</label>
-                                    <input type="password" required className="w-full border border-gray-300 rounded-md shadow-sm py-3 px-4 focus:ring-brand-gold focus:border-brand-gold text-center text-xl tracking-widest" placeholder="Zadejte heslo" value={pinInput} onChange={(e) => setPinInput(e.target.value)} />
-                                </div>
-                                {loginError && <p className="text-red-600 text-sm text-center font-medium bg-red-50 py-2 rounded">{loginError}</p>}
-                                <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent text-lg font-bold rounded-md text-white bg-brand-gold hover:opacity-90 focus:outline-none shadow-md transition-all">
+                                {loginError && <p className="text-red-500 text-sm text-center font-bold bg-red-50/80 backdrop-blur-sm py-3 rounded-xl border border-red-100">{loginError}</p>}
+                                <button type="submit" className="w-full flex justify-center py-4 px-4 rounded-2xl text-lg font-bold text-white bg-brand-gold hover:bg-[#a68051] focus:outline-none shadow-xl shadow-brand-gold/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0">
                                     Vstoupit do aplikace
                                 </button>
                             </form>
@@ -305,100 +307,139 @@
                 );
             }
 
+            // --- STREAMING_CHUNK: Hlavní Aplikace (Dashboard) ---
             return (
-                <div className="min-h-screen bg-brand-light text-brand-dark font-sans pb-12">
-                    <header className="bg-brand-dark text-white shadow-md">
-                        <div className="max-w-[1600px] mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="min-h-screen pb-24 md:pb-12 animate-fade-in relative">
+                    {/* Header (Glass) */}
+                    <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-white/40 shadow-sm">
+                        <div className="max-w-[1600px] mx-auto px-4 py-3 sm:px-6 lg:px-8 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <img src="https://jebley-barber.cz/images/logo.png" alt="Jebley Barber" className="h-10 object-contain" />
+                                <div className="bg-brand-dark p-2 rounded-xl"><img src="https://jebley-barber.cz/images/logo.png" alt="Logo" className="h-6" /></div>
+                                <h1 className="text-xl font-extrabold tracking-tight hidden sm:block">Barber Systém</h1>
                             </div>
-                            <div className="flex items-center gap-4 bg-brand-brown p-2 rounded-lg">
-                                <span className="text-xs text-brand-light uppercase tracking-wider opacity-80">Přihlášen jako:</span>
-                                <span className="text-brand-gold font-bold">{activeRole}</span>
-                                <div className="h-4 w-px bg-brand-light opacity-20 mx-2"></div>
-                                <button onClick={() => {setIsAppUnlocked(false); setPinInput('');}} className="text-sm text-brand-light hover:text-white underline font-medium">Odhlásit</button>
+                            <div className="flex items-center gap-3 bg-white/50 backdrop-blur-md border border-white/60 py-1.5 px-4 rounded-full shadow-sm">
+                                <span className="text-xs font-bold text-brand-gray uppercase hidden md:block">Profil:</span>
+                                <span className="text-brand-gold font-bold text-sm">{activeRole}</span>
+                                <div className="h-4 w-px bg-brand-gray/30 mx-1"></div>
+                                <button onClick={() => {setIsAppUnlocked(false); setPinInput('');}} className="text-sm font-semibold text-brand-gray hover:text-brand-dark transition-colors">Odhlásit</button>
                             </div>
                         </div>
                     </header>
 
-                    <main className="max-w-[1600px] mx-auto px-4 py-8 sm:px-6 lg:px-8">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                            <div className="flex items-center gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gray mb-1">Vyberte měsíc</label>
-                                    <input 
-                                        type="month" 
-                                        value={selectedMonth} 
-                                        onChange={(e) => setSelectedMonth(e.target.value)} 
-                                        disabled={isBarber}
-                                        className={`block w-full rounded-md border-gray-300 py-2 px-3 text-base sm:text-sm font-semibold border ${isBarber ? 'bg-gray-100 text-brand-gray cursor-not-allowed' : 'bg-white focus:border-brand-gold focus:ring-brand-gold cursor-pointer'}`} 
-                                    />
-                                    {isBarber && <p className="text-xs text-brand-gold mt-1">Dostupný pouze aktuální měsíc</p>}
-                                </div>
-                                {isAdmin && (
-                                    <div className="mt-6">
-                                        <button onClick={toggleLockMonth} className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors shadow-sm ${isMonthLocked ? 'bg-red-100 text-red-800 hover:bg-red-200 border border-red-200' : 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-200'}`}>
-                                            {isMonthLocked ? '🔒 Měsíc Uzamčen (Odemknout)' : '🔓 Měsíc Otevřen (Zamknout)'}
-                                        </button>
+                    <main className="max-w-[1600px] mx-auto px-4 mt-6 sm:px-6 lg:px-8 flex flex-col xl:flex-row gap-6">
+                        
+                        {/* Levý panel: Ovládání + Záznamy */}
+                        <div className="flex-1 flex flex-col gap-6">
+                            
+                            {/* Controls (Glass) */}
+                            <div className="bg-white/70 backdrop-blur-xl border border-white/50 p-5 rounded-[2rem] shadow-glass flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div className="flex items-center gap-4 w-full sm:w-auto">
+                                    <div className="flex-1 sm:flex-none">
+                                        <label className="block text-xs font-bold text-brand-gray uppercase mb-1 ml-1">Měsíc</label>
+                                        <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} disabled={isBarber}
+                                            className={`w-full sm:w-auto rounded-xl py-2.5 px-4 text-sm font-bold outline-none transition-all ${isBarber ? 'bg-gray-100/50 text-brand-gray cursor-not-allowed' : 'bg-white shadow-sm border border-white/80 focus:ring-2 focus:ring-brand-gold'}`} />
                                     </div>
+                                    {isAdmin && (
+                                        <button onClick={toggleLockMonth} className={`mt-5 px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${isMonthLocked ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+                                            {isMonthLocked ? '🔒 Zamčeno' : '🔓 Odemčeno'}
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {/* Tlačítko Přidat - Skryto na mobilu (tam je FAB), zobrazeno na Desktopu */}
+                                {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
+                                    <button onClick={openModalForNew} className="hidden md:flex bg-brand-gold text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-gold/30 hover:bg-[#a68051] transition-all transform hover:-translate-y-0.5 items-center gap-2">
+                                        <span className="text-xl leading-none">+</span> Nový zákazník
+                                    </button>
                                 )}
                             </div>
-                            {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
-                                <button onClick={() => {
-                                    const dt = getDefaultDateTime();
-                                    setFormData({ date: dt.date, time: dt.time, service: SERVICES[0].name, price: SERVICES[0].price, payment: PAYMENTS[0], voucherCode: '', notes: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1' });
-                                    setIsModalOpen(true);
-                                }} className="bg-brand-gold text-white px-6 py-3 rounded-lg font-bold shadow-md transition-all hover:opacity-90 flex items-center gap-2 transform hover:scale-105">
-                                    <span className="text-xl leading-none">+</span> Nový zákazník
-                                </button>
-                            )}
-                        </div>
 
-                        {isBarber && isMonthLocked ? (
-                            <div className="bg-red-50 text-red-700 p-12 rounded-xl text-center border border-red-200 shadow-sm">
-                                <div className="text-5xl mb-4">🔒</div>
-                                <h2 className="text-3xl font-bold mb-2">Tento měsíc je uzavřen</h2>
-                                <p className="text-lg">Výkazy byly předány účetnímu. Pro úpravy kontaktujte majitele.</p>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col lg:flex-row gap-8">
-                                <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-brand-light">
+                            {/* Uzamčeno Alert */}
+                            {isBarber && isMonthLocked ? (
+                                <div className="bg-white/60 backdrop-blur-xl border border-white/50 p-12 rounded-[2rem] shadow-glass text-center animate-slide-up">
+                                    <div className="text-6xl mb-4 opacity-50">🔒</div>
+                                    <h2 className="text-2xl font-extrabold mb-2 text-brand-dark">Tento měsíc je uzavřen</h2>
+                                    <p className="text-brand-gray font-medium">Data byla předána účetní. Pro úpravy kontaktujte majitele.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* MOBILNÍ ZOBRAZENÍ: KARTY (Skryté na Desktopu) */}
+                                    <div className="md:hidden flex flex-col gap-4">
+                                        {filteredRecords.length === 0 ? (
+                                            <div className="text-center p-8 bg-white/50 rounded-3xl border border-white/50 text-brand-gray font-medium">Zatím žádné záznamy.</div>
+                                        ) : (
+                                            filteredRecords.map(record => (
+                                                <div key={record.id} className="bg-white/80 backdrop-blur-xl border border-white/80 p-5 rounded-[1.5rem] shadow-sm flex flex-col gap-3 animate-slide-up">
+                                                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="bg-brand-gold/10 text-brand-gold px-2.5 py-1 rounded-lg text-sm font-extrabold">{formatDate(record.date)}</div>
+                                                            <div className="text-brand-gray font-bold text-sm">{record.time}</div>
+                                                        </div>
+                                                        <div className="text-lg font-extrabold text-brand-dark">{record.price} Kč</div>
+                                                    </div>
+                                                    
+                                                    <div>
+                                                        <div className="font-bold text-brand-dark">{record.service}</div>
+                                                        <div className="text-sm font-medium text-brand-gray mt-1 flex items-center gap-2">
+                                                            <span>✂️ {record.barber}</span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex justify-between items-end pt-2">
+                                                        <div>
+                                                            <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600' : ''}`}>
+                                                                {record.payment} {record.payment === 'POUKAZ' && `(#${record.voucherCode})`}
+                                                            </span>
+                                                            {record.notes && <div className="text-xs text-brand-gray mt-2 italic">"{record.notes}"</div>}
+                                                        </div>
+                                                        
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 px-3 py-1.5 rounded-xl text-sm font-bold">Upravit</button>
+                                                            {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 px-3 py-1.5 rounded-xl text-sm font-bold">Smazat</button>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    {/* DESKTOP ZOBRAZENÍ: TABULKA (Skryté na Mobilu) */}
+                                    <div className="hidden md:block bg-white/70 backdrop-blur-xl border border-white/50 rounded-[2rem] shadow-glass overflow-hidden">
+                                        <table className="min-w-full text-left border-collapse">
+                                            <thead className="bg-white/40 border-b border-white/50 backdrop-blur-md">
                                                 <tr>
-                                                    <th className="px-6 py-4 text-left text-xs font-bold text-brand-brown uppercase tracking-wider">Datum a Čas</th>
-                                                    <th className="px-4 py-4 text-left text-xs font-bold text-brand-brown uppercase tracking-wider">Kadeřník</th>
-                                                    <th className="px-4 py-4 text-left text-xs font-bold text-brand-brown uppercase tracking-wider">Služba</th>
-                                                    <th className="px-4 py-4 text-left text-xs font-bold text-brand-brown uppercase tracking-wider">Platba</th>
-                                                    <th className="px-4 py-4 text-right text-xs font-bold text-brand-brown uppercase tracking-wider">Cena</th>
-                                                    <th className="px-4 py-4 text-left text-xs font-bold text-brand-brown uppercase tracking-wider">Poznámky</th>
-                                                    <th className="px-6 py-4 text-right text-xs font-bold text-brand-brown uppercase tracking-wider">Akce</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Datum a Čas</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Kadeřník</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Služba</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Platba</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Cena</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider">Poznámka</th>
+                                                    <th className="px-6 py-4 text-xs font-extrabold text-brand-gray uppercase tracking-wider text-right">Akce</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="bg-white divide-y divide-gray-100">
+                                            <tbody className="divide-y divide-gray-100/50">
                                                 {filteredRecords.length === 0 ? (
-                                                    <tr><td colSpan="7" className="px-6 py-16 text-center text-brand-gray text-lg">V tomto měsíci nejsou zatím žádné záznamy.</td></tr>
+                                                    <tr><td colSpan="7" className="px-6 py-16 text-center text-brand-gray font-medium">V tomto měsíci nejsou zatím žádné záznamy.</td></tr>
                                                 ) : (
                                                     filteredRecords.map((record) => (
-                                                        <tr key={record.id} className="hover:bg-brand-light/50 transition-colors">
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-brand-dark">{formatDate(record.date)} <span className="text-brand-gray ml-2">{record.time}</span></td>
-                                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-brand-brown font-medium">{record.barber}</td>
-                                                            <td className="px-4 py-4 text-sm text-brand-dark break-words min-w-[200px] leading-relaxed">{record.service}</td>
-                                                            <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-100 text-red-800' : ''} ${record.payment === 'KARTA' || record.payment === 'QR' ? 'bg-green-100 text-green-800' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-100 text-purple-800' : ''}`}>{record.payment}</span>
+                                                        <tr key={record.id} className="hover:bg-white/50 transition-colors">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm"><span className="font-bold text-brand-dark">{formatDate(record.date)}</span> <span className="text-brand-gray font-medium ml-2">{record.time}</span></td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-brown">{record.barber}</td>
+                                                            <td className="px-6 py-4 text-sm font-semibold text-brand-dark max-w-[250px] leading-snug">{record.service}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-full ${record.payment === 'HOTOVOST' ? 'bg-red-50 text-red-600 border border-red-100' : ''} ${record.payment === 'QR' ? 'bg-green-50 text-green-600 border border-green-100' : ''} ${record.payment === 'POUKAZ' ? 'bg-purple-50 text-purple-600 border border-purple-100' : ''}`}>
+                                                                    {record.payment}
+                                                                </span>
                                                             </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-brand-dark text-right text-lg">{record.price} Kč</td>
-                                                            <td className="px-4 py-4 text-sm text-brand-gray break-words min-w-[150px]">
-                                                                {record.payment === 'POUKAZ' && <span className="inline-block bg-purple-50 border border-purple-200 px-2 py-0.5 rounded text-purple-800 font-bold mb-1">Poukaz: {record.voucherCode}</span>}
-                                                                <div>{record.notes}</div>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-brand-dark text-right text-base">{record.price} Kč</td>
+                                                            <td className="px-6 py-4 text-sm text-brand-gray max-w-[200px]">
+                                                                {record.payment === 'POUKAZ' && <span className="block text-xs font-bold text-purple-600 mb-0.5">#{record.voucherCode}</span>}
+                                                                <span className="truncate block">{record.notes}</span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-right">
                                                                 <div className="flex justify-end gap-2">
-                                                                    <button onClick={() => openEditModal(record)} className="text-brand-dark hover:text-brand-gold bg-brand-light border border-gray-200 px-3 py-1.5 rounded transition-colors shadow-sm font-semibold">Upravit</button>
-                                                                    {isAdmin && (
-                                                                        <button onClick={() => handleDelete(record.id)} className="text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition-colors shadow-sm font-semibold">Smazat</button>
-                                                                    )}
+                                                                    <button onClick={() => openEditModal(record)} className="text-brand-gold bg-brand-gold/10 hover:bg-brand-gold/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Upravit</button>
+                                                                    {isAdmin && <button onClick={() => handleDelete(record.id)} className="text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Smazat</button>}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -407,112 +448,130 @@
                                             </tbody>
                                         </table>
                                     </div>
-                                </div>
+                                </>
+                            )}
+                        </div>
 
-                                <div className="w-full lg:w-80 flex flex-col gap-4">
-                                    <div className="bg-brand-dark rounded-xl shadow-xl border border-brand-brown overflow-hidden text-brand-light sticky top-6">
-                                        <div className="p-5 bg-brand-brown border-b border-brand-brown flex justify-between items-center">
-                                            <h3 className="font-bold text-lg text-white">Souhrn měsíce</h3>
-                                            <span className="bg-brand-dark px-2 py-1 rounded text-xs font-mono text-brand-gold">{selectedMonth}</span>
+                        {/* Pravý panel: Dark Glass Souhrn */}
+                        <div className="w-full xl:w-[380px] shrink-0">
+                            <div className="bg-brand-dark/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-glass-dark overflow-hidden sticky top-24 text-white p-6">
+                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/10">
+                                    <h3 className="font-extrabold text-xl tracking-tight">Souhrn měsíce</h3>
+                                    <span className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-brand-gold">{selectedMonth}</span>
+                                </div>
+                                
+                                {(!isBarber) && (
+                                    <div className="mb-8 bg-gradient-to-br from-white/10 to-transparent p-5 rounded-2xl border border-white/5">
+                                        <p className="text-white/50 text-xs font-bold uppercase tracking-wider mb-1">Celková tržba Salonu</p>
+                                        <p className="text-4xl font-extrabold text-brand-gold mb-4">{totals.total.toLocaleString()} <span className="text-xl text-brand-gold/60">Kč</span></p>
+                                        
+                                        <div className="space-y-2.5">
+                                            <div className="flex justify-between items-center text-sm font-medium"><span className="text-white/70">Hotovost</span><span className="font-bold">{totals.cash.toLocaleString()} Kč</span></div>
+                                            <div className="flex justify-between items-center text-sm font-medium"><span className="text-white/70">QR platby</span><span className="font-bold">{totals.qr.toLocaleString()} Kč</span></div>
+                                            <div className="flex justify-between items-center text-sm font-medium"><span className="text-white/70">Poukazy</span><span className="font-bold">{totals.voucher.toLocaleString()} Kč</span></div>
+                                            <div className="flex justify-between items-center pt-3 border-t border-white/10 mt-2"><span className="text-white/50 font-bold text-xs uppercase tracking-wider">Počet služeb celkem</span><span className="font-bold text-lg bg-brand-gold text-brand-dark px-2.5 py-0.5 rounded-lg">{totals.count}</span></div>
                                         </div>
-                                        <div className="p-6">
-                                            {/* Zobrazení celkových čísel jen pro Admina/Účetní */}
-                                            {(!isBarber) && (
-                                                <div className="mb-6 bg-brand-brown/50 p-4 rounded-lg border border-brand-brown">
-                                                    <p className="text-brand-gray text-sm mb-1 uppercase tracking-wider font-semibold">Celková tržba Salonu</p>
-                                                    <p className="text-4xl font-bold text-brand-gold">{totals.total.toLocaleString()} <span className="text-xl opacity-70">Kč</span></p>
-                                                    
-                                                    <div className="mt-4 pt-4 border-t border-brand-brown/50 space-y-2">
-                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Hotovost</span><span className="font-bold text-white">{totals.cash.toLocaleString()} Kč</span></div>
-                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">QR platby</span><span className="font-bold text-white">{totals.qr.toLocaleString()} Kč</span></div>
-                                                        <div className="flex justify-between items-center text-sm"><span className="text-brand-light">Poukazy</span><span className="font-bold text-white">{totals.voucher.toLocaleString()} Kč</span></div>
-                                                        <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t border-brand-brown/30"><span className="text-brand-gray font-medium">Služby celkem</span><span className="font-bold text-brand-gold">{totals.count}</span></div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <h4 className="text-xs uppercase tracking-wider font-extrabold text-brand-gold mb-4">{isBarber ? 'TVOJE VÝSLEDKY' : 'ROZPAD NA KADEŘNÍKY'}</h4>
+                                    
+                                    <div className="space-y-3">
+                                        {Object.entries(totals.byBarber).map(([barberName, data]) => {
+                                            if (isBarber && barberName !== activeRole) return null;
+                                            return (
+                                                <div key={barberName} className="bg-white/5 border border-white/10 rounded-2xl p-4 transition-all hover:bg-white/10">
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="font-extrabold text-lg">{barberName}</span>
+                                                        <span className="font-extrabold text-brand-gold text-lg">{data.total.toLocaleString()} Kč</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-medium text-white/60">
+                                                        <div className="flex justify-between"><span>Hotovost:</span><span className="text-white font-bold">{data.cash.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between"><span>QR:</span><span className="text-white font-bold">{data.qr.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between"><span>Poukaz:</span><span className="text-white font-bold">{data.voucher.toLocaleString()} Kč</span></div>
+                                                        <div className="flex justify-between"><span>Služeb:</span><span className="text-brand-gold font-extrabold">{data.count}</span></div>
                                                     </div>
                                                 </div>
-                                            )}
-
-                                            {/* Výpis na kadeřníky */}
-                                            <div className="space-y-4">
-                                                <h4 className="text-sm uppercase tracking-wider font-bold text-brand-gold mb-2">{isBarber ? 'Tvoje výsledky' : 'Rozpad na kadeřníky'}</h4>
-                                                
-                                                {Object.entries(totals.byBarber).map(([barberName, data]) => {
-                                                    // Kadeřník vidí jen sám sebe
-                                                    if (isBarber && barberName !== activeRole) return null;
-
-                                                    return (
-                                                        <div key={barberName} className="pb-4 border-b border-brand-brown last:border-0 last:pb-0">
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className="block text-brand-light font-bold text-lg">{barberName}</span>
-                                                                <span className="font-bold text-xl text-white">{data.total.toLocaleString()} Kč</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2 text-xs bg-brand-dark/50 p-2 rounded border border-brand-brown/30">
-                                                                <div className="flex justify-between"><span className="text-brand-gray">Hotovost:</span><span className="text-white font-medium">{data.cash.toLocaleString()} Kč</span></div>
-                                                                <div className="flex justify-between"><span className="text-brand-gray">QR:</span><span className="text-white font-medium">{data.qr.toLocaleString()} Kč</span></div>
-                                                                <div className="flex justify-between"><span className="text-brand-gray">Poukaz:</span><span className="text-white font-medium">{data.voucher.toLocaleString()} Kč</span></div>
-                                                                <div className="flex justify-between"><span className="text-brand-gray">Služeb:</span><span className="text-brand-gold font-medium">{data.count}</span></div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                
-                                                {Object.keys(totals.byBarber).length === 0 && (
-                                                    <p className="text-brand-gray text-sm italic">Žádné tržby k zobrazení.</p>
-                                                )}
-                                            </div>
-                                        </div>
+                                            );
+                                        })}
+                                        {Object.keys(totals.byBarber).length === 0 && <p className="text-white/40 text-sm italic text-center py-4">Zatím žádná data.</p>}
                                     </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </main>
 
+                    {}
+                    {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
+                        <button onClick={openModalForNew} className="md:hidden fixed bottom-6 right-6 w-16 h-16 bg-brand-gold text-white rounded-[1.5rem] shadow-glass shadow-brand-gold/40 flex items-center justify-center z-40 transform active:scale-95 transition-all">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                    )}
+
+                    {}
                     {isModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-dark/80 backdrop-blur-sm transition-opacity">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
-                                <div className="bg-brand-dark text-white px-6 py-5 flex justify-between items-center">
-                                    <h3 className="text-xl font-bold flex items-center gap-2"><span>✂️</span> {editingId ? 'Upravit zákazníka' : 'Nový zákazník'}</h3>
-                                    <button onClick={closeModal} className="text-brand-gray hover:text-brand-gold text-3xl leading-none">&times;</button>
+                        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-brand-dark/40 backdrop-blur-sm transition-opacity p-0 sm:p-4">
+                            <div className="bg-white/90 backdrop-blur-2xl w-full max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-glass border-t sm:border border-white/50 overflow-hidden transform animate-slide-up max-h-[90vh] flex flex-col">
+                                <div className="px-6 py-5 flex justify-between items-center border-b border-gray-200/50">
+                                    <h3 className="text-xl font-extrabold text-brand-dark">{editingId ? 'Upravit zákazníka' : 'Nový zákazník'}</h3>
+                                    <button onClick={closeModal} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-brand-gray hover:bg-gray-200 hover:text-brand-dark transition-colors font-bold">&times;</button>
                                 </div>
-                                <form onSubmit={handleSaveRecord} className="p-6 space-y-5">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-sm font-bold text-brand-brown mb-1">Datum *</label><input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-brand-gold focus:border-brand-gold py-2 px-3 border" /></div>
-                                        <div><label className="block text-sm font-bold text-brand-brown mb-1">Čas *</label><input required type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-brand-gold focus:border-brand-gold py-2 px-3 border" /></div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-brand-brown mb-1">Kadeřník</label>
-                                        <select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-brand-gold focus:border-brand-gold py-2 px-3 bg-brand-light border">
-                                            <option>Kadeřník 1</option><option>Kadeřník 2</option><option>Admin (Majitel)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-brand-brown mb-1">Služba *</label>
-                                        <select value={formData.service} onChange={handleServiceChange} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-brand-gold focus:border-brand-gold py-2 px-3 font-medium border">
-                                            {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name} ({s.price} Kč)</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-brand-brown mb-2">Metoda platby *</label>
-                                        <div className="flex bg-brand-light p-1.5 rounded-lg border border-gray-200">
-                                            {PAYMENTS.map(pay => (
-                                                <button key={pay} type="button" onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${formData.payment === pay ? 'bg-white shadow-md text-brand-gold border border-gray-200' : 'text-gray-500 hover:text-brand-dark'}`}>{pay}</button>
-                                            ))}
+                                
+                                <div className="overflow-y-auto flex-1">
+                                    <form id="recordForm" onSubmit={handleSaveRecord} className="p-6 space-y-5">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Datum *</label>
+                                                <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-white/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-bold outline-none" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Čas *</label>
+                                                <input required type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full bg-white/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-bold outline-none" />
+                                            </div>
                                         </div>
-                                    </div>
-                                    {formData.payment === 'POUKAZ' && (
-                                        <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 shadow-inner animate-fade-in">
-                                            <label className="block text-sm font-bold text-purple-900 mb-2">Číslo poukazu (Vouchéru) *</label>
-                                            <input required type="text" placeholder="Např. 15, 24, VCH-123" value={formData.voucherCode} onChange={e => setFormData({...formData, voucherCode: e.target.value})} className="w-full border-purple-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 bg-white py-2 px-3 text-lg font-mono placeholder-purple-200 border" />
+                                        
+                                        <div>
+                                            <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Kadeřník</label>
+                                            <select value={formData.barber} onChange={e => setFormData({...formData, barber: e.target.value})} className="w-full bg-gray-50/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-bold outline-none appearance-none">
+                                                <option>Kadeřník 1</option><option>Kadeřník 2</option><option>Admin (Majitel)</option>
+                                            </select>
                                         </div>
-                                    )}
-                                    <div>
-                                        <label className="block text-sm font-bold text-brand-brown mb-1">Poznámky</label>
-                                        <input type="text" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Volitelná poznámka..." className="w-full border-gray-300 rounded-md shadow-sm focus:ring-brand-gold focus:border-brand-gold py-2 px-3 border" />
-                                    </div>
-                                    <div className="pt-6 flex gap-3 border-t border-gray-100">
-                                        <button type="button" onClick={closeModal} className="flex-1 px-4 py-3 border border-gray-300 text-brand-dark rounded-lg hover:bg-brand-light font-bold transition-colors">Zrušit</button>
-                                        <button type="submit" className="flex-1 px-4 py-3 bg-brand-gold text-white rounded-lg hover:opacity-90 font-bold shadow-md transition-all">{editingId ? 'Uložit úpravy' : 'Uložit záznam'}</button>
-                                    </div>
-                                </form>
+                                        
+                                        <div>
+                                            <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Služba *</label>
+                                            <select value={formData.service} onChange={handleServiceChange} className="w-full bg-white/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-bold outline-none text-brand-dark appearance-none">
+                                                {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name} ({s.price} Kč)</option>)}
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Platba *</label>
+                                            <div className="flex bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200/50">
+                                                {PAYMENTS.map(pay => (
+                                                    <button key={pay} type="button" onClick={() => setFormData({...formData, payment: pay, voucherCode: ''})} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${formData.payment === pay ? 'bg-white shadow-sm text-brand-dark' : 'text-brand-gray hover:text-brand-dark'}`}>{pay}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        
+                                        {formData.payment === 'POUKAZ' && (
+                                            <div className="bg-purple-50/80 p-4 rounded-2xl border border-purple-100 animate-fade-in">
+                                                <label className="block text-xs font-extrabold text-purple-800 uppercase mb-1.5 ml-1">Číslo poukazu *</label>
+                                                <input required type="text" placeholder="Např. 15, VCH-123" value={formData.voucherCode} onChange={e => setFormData({...formData, voucherCode: e.target.value})} className="w-full bg-white border border-purple-200 rounded-xl shadow-sm focus:ring-2 focus:ring-purple-400 py-3 px-4 font-mono font-bold outline-none" />
+                                            </div>
+                                        )}
+                                        
+                                        <div>
+                                            <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Poznámka</label>
+                                            <input type="text" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Volitelné..." className="w-full bg-white/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-medium outline-none" />
+                                        </div>
+                                    </form>
+                                </div>
+                                
+                                <div className="p-4 sm:p-6 bg-gray-50/80 border-t border-gray-200/50 flex gap-3">
+                                    <button type="button" onClick={closeModal} className="flex-1 py-3.5 bg-white border border-gray-200 text-brand-dark rounded-xl font-bold shadow-sm hover:bg-gray-50 transition-colors">Zrušit</button>
+                                    <button type="submit" form="recordForm" className="flex-1 py-3.5 bg-brand-gold text-white rounded-xl font-bold shadow-lg shadow-brand-gold/30 hover:bg-[#a68051] transition-all active:scale-95">{editingId ? 'Uložit úpravy' : 'Přidat zákazníka'}</button>
+                                </div>
                             </div>
                         </div>
                     )}
