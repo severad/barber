@@ -37,7 +37,7 @@
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
     
     <style>
         body { 
@@ -69,7 +69,8 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        // Změna: Importujeme signInWithEmailAndPassword a signOut
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         const { useState, useEffect, useMemo } = React;
@@ -88,12 +89,7 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        const PASSWORDS = {
-            'Admin (Majitel)': 'Wm1yemxpbmE2OQ==', // Zmrzlina69
-            'Kadeřník 1': 'QmFyYmVyMDE=',         // Barber01
-            'Kadeřník 2': 'QmFyYmVyMDI=',         // Barber02
-            'Účetní': 'VWN0bzEyMzQ='              // Ucto1234
-        };
+        // HESLA BYLA ODSTRANĚNA - O VŠECHNO SE STARÁ FIREBASE AUTHENTICATION NA SERVERU GOOGLU
 
         const SERVICES = [
             { name: 'Klasický střih', price: 520 },
@@ -116,7 +112,6 @@
         ];
 
         const PAYMENTS = ['HOTOVOST', 'QR', 'POUKAZ'];
-        const ROLES = ['Admin (Majitel)', 'Kadeřník 1', 'Kadeřník 2', 'Účetní'];
 
         const getDefaultDateTime = () => {
             const now = new Date();
@@ -126,8 +121,20 @@
             return { date, time };
         };
 
+        // Pomocná funkce pro určení role podle e-mailu
+        const determineRole = (email) => {
+            if (!email) return '';
+            const lowerEmail = email.toLowerCase();
+            if (lowerEmail.includes('admin')) return 'Admin (Majitel)';
+            if (lowerEmail.includes('barber1') || lowerEmail.includes('kadernik1')) return 'Kadeřník 1';
+            if (lowerEmail.includes('barber2') || lowerEmail.includes('kadernik2')) return 'Kadeřník 2';
+            if (lowerEmail.includes('ucetni')) return 'Účetní';
+            return 'Kadeřník 1'; // Výchozí fallback
+        };
+
         // --- STREAMING_CHUNK: Hlavní Komponenta App ---
         function App() {
+            // Změna: user a activeRole už nepotřebují ruční odemykání "isAppUnlocked", firebase se o to stará samo
             const [user, setUser] = useState(null);
             const [records, setRecords] = useState([]);
             const [settings, setSettings] = useState({});
@@ -142,17 +149,27 @@
             
             const [formData, setFormData] = useState({
                 date: '', time: '', service: SERVICES[0].name, price: SERVICES[0].price, 
-                payment: PAYMENTS[0], voucherCode: '', notes: '', barber: 'Kadeřník 1'
+                payment: PAYMENTS[0], voucherCode: '', notes: '', adminNote: '', barber: 'Kadeřník 1'
             });
 
-            const [isAppUnlocked, setIsAppUnlocked] = useState(false);
-            const [selectedLoginRole, setSelectedLoginRole] = useState('Kadeřník 1');
-            const [pinInput, setPinInput] = useState('');
+            // Přihlašovací stavy (nové, na mail)
+            const [emailInput, setEmailInput] = useState('');
+            const [passwordInput, setPasswordInput] = useState('');
             const [loginError, setLoginError] = useState('');
+            const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
+            // Změna: onAuthStateChanged teď správně obsluhuje stav
             useEffect(() => {
-                signInAnonymously(auth).catch(() => {});
-                const unsubscribe = onAuthStateChanged(auth, setUser);
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    if (currentUser && !currentUser.isAnonymous) {
+                        setUser(currentUser);
+                        setActiveRole(determineRole(currentUser.email));
+                    } else {
+                        setUser(null);
+                        setActiveRole('');
+                    }
+                    setIsCheckingAuth(false);
+                });
                 return () => unsubscribe();
             }, []);
 
@@ -182,14 +199,28 @@
                 if (isBarber && selectedMonth !== currentMonthStr) setSelectedMonth(currentMonthStr);
             }, [isBarber, selectedMonth, currentMonthStr]);
 
-            const handleEasyLogin = (e) => {
+            // Změna: Nová Firebase přihlašovací funkce
+            const handleFirebaseLogin = async (e) => {
                 e.preventDefault();
                 setLoginError('');
-                if (btoa(pinInput) !== PASSWORDS[selectedLoginRole]) {
-                    setLoginError('Nesprávné heslo!'); return;
+                try {
+                    await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+                    // Přesměrování proběhne automaticky přes onAuthStateChanged výše
+                } catch (error) {
+                    console.error(error);
+                    // Přeložíme nejčastější chyby Firebase do češtiny
+                    if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                        setLoginError('Špatný e-mail nebo heslo!');
+                    } else if (error.code === 'auth/invalid-email') {
+                         setLoginError('Neplatný formát e-mailu!');
+                    } else {
+                        setLoginError('Došlo k chybě při přihlašování.');
+                    }
                 }
-                setActiveRole(selectedLoginRole);
-                setIsAppUnlocked(true);
+            };
+
+            const handleLogout = () => {
+                signOut(auth).catch(error => console.error("Chyba při odhlašování", error));
             };
 
             const filteredRecords = useMemo(() => {
@@ -238,14 +269,14 @@
                 const dt = getDefaultDateTime();
                 setFormData({
                     date: dt.date, time: dt.time, service: SERVICES[0].name, price: SERVICES[0].price, 
-                    payment: PAYMENTS[0], voucherCode: '', notes: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1'
+                    payment: PAYMENTS[0], voucherCode: '', notes: '', adminNote: '', barber: activeRole.includes('Kadeřník') ? activeRole : 'Kadeřník 1'
                 });
                 setEditingId(null);
                 setIsModalOpen(true);
             };
 
             const openEditModal = (record) => {
-                setFormData({ ...record, voucherCode: record.voucherCode || '', notes: record.notes || '' });
+                setFormData({ ...record, voucherCode: record.voucherCode || '', notes: record.notes || '', adminNote: record.adminNote || '' });
                 setEditingId(record.id);
                 setIsModalOpen(true);
             };
@@ -264,6 +295,14 @@
             const handleSaveRecord = async (e) => {
                 e.preventDefault();
                 if (!user) return;
+                
+                // Kontrola zamčeného měsíce proti přepsání ručně
+                const recordMonth = formData.date.substring(0, 7);
+                if (settings[recordMonth]?.locked === true && !isAdmin) {
+                    alert("Tento měsíc je uzamčen. Nelze v něm provádět změny.");
+                    return;
+                }
+
                 if (formData.payment === 'POUKAZ' && !formData.voucherCode.trim()) {
                     alert("Při platbě poukazem je nutné zadat číslo poukazu!"); return;
                 }
@@ -279,19 +318,26 @@
 
             const handleDelete = async (id) => {
                 if (!user) return;
+                
+                 // Kontrola zamčeného měsíce proti smazání
+                const recordToDelete = records.find(r => r.id === id);
+                if (recordToDelete) {
+                     const recordMonth = recordToDelete.date.substring(0, 7);
+                     if (settings[recordMonth]?.locked === true && !isAdmin) {
+                         alert("Záznam spadá do uzamčeného měsíce. Nelze jej smazat.");
+                         return;
+                     }
+                }
+
                 if (window.confirm("Opravdu smazat tento záznam? Tuto akci nelze vrátit.")) {
-                    // 1. Najdeme záznam, který chceme smazat
-                    const recordToDelete = records.find(r => r.id === id);
                     if (recordToDelete) {
                         try {
-                            // 2. Nejprve záznam zkopírujeme do nové "složky" (logu smazaných)
                             await addDoc(collection(db, 'deleted_records'), {
                                 ...recordToDelete,
-                                deletedAt: new Date().toISOString(), // Přidáme čas smazání
-                                deletedBy: activeRole,               // Přidáme, kdo to smazal
+                                deletedAt: new Date().toISOString(),
+                                deletedBy: activeRole,
                                 originalId: id
                             });
-                            // 3. Poté ho teprve nenávratně smažeme z hlavní aplikace
                             await deleteDoc(doc(db, 'barber_records', id));
                         } catch (error) { 
                             console.error("Chyba při mazání:", error); 
@@ -311,8 +357,13 @@
                 return `${day}.${month}.${year}`;
             };
 
-            // --- STREAMING_CHUNK: Obrazovka Přihlášení (Glassmorphism) ---
-            if (!isAppUnlocked) {
+            // Loading state
+            if (isCheckingAuth) {
+                return <div className="min-h-screen flex items-center justify-center text-brand-dark font-bold">Načítání zabezpečení...</div>;
+            }
+
+            // --- STREAMING_CHUNK: Obrazovka Přihlášení (Nová přes Firebase Auth) ---
+            if (!user) {
                 return (
                     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative">
                         <div className="max-w-md w-full space-y-8 bg-white/70 backdrop-blur-xl p-8 rounded-[2rem] shadow-glass border border-white/50 animate-fade-in z-10">
@@ -321,24 +372,22 @@
                                     <img src="https://jebley-barber.cz/images/logo.png" alt="Jebley Barber" className="h-12 object-contain -rotate-3" />
                                 </div>
                                 <h2 className="text-3xl font-extrabold text-brand-dark tracking-tight">Vstup do systému</h2>
-                                <p className="mt-2 text-brand-gray font-medium">Jebley Barber Salon</p>
+                                <p className="mt-2 text-brand-gray font-medium">Zabezpečený přístup (Firebase)</p>
                             </div>
-                            <form className="mt-8 space-y-6" onSubmit={handleEasyLogin}>
+                            <form className="mt-8 space-y-6" onSubmit={handleFirebaseLogin}>
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-brand-dark/70 mb-2 ml-1">Kdo se přihlašuje?</label>
-                                        <select value={selectedLoginRole} onChange={(e) => { setSelectedLoginRole(e.target.value); setPinInput(''); setLoginError(''); }} className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent text-lg font-semibold text-brand-dark outline-none transition-all appearance-none backdrop-blur-sm">
-                                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                                        </select>
+                                    <div className="animate-fade-in">
+                                        <label className="block text-sm font-bold text-brand-dark/70 mb-2 ml-1">E-mail</label>
+                                        <input type="email" required className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent outline-none transition-all backdrop-blur-sm" placeholder="např. admin@jebley.cz" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
                                     </div>
                                     <div className="animate-fade-in">
                                         <label className="block text-sm font-bold text-brand-dark/70 mb-2 ml-1">Heslo</label>
-                                        <input type="password" required className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent text-center text-2xl tracking-widest outline-none transition-all backdrop-blur-sm" placeholder="••••••••" value={pinInput} onChange={(e) => setPinInput(e.target.value)} />
+                                        <input type="password" required className="w-full bg-white/60 border border-white/80 rounded-2xl shadow-sm py-3.5 px-4 focus:ring-2 focus:ring-brand-gold focus:border-transparent text-center text-2xl tracking-widest outline-none transition-all backdrop-blur-sm" placeholder="••••••••" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} />
                                     </div>
                                 </div>
                                 {loginError && <p className="text-red-500 text-sm text-center font-bold bg-red-50/80 backdrop-blur-sm py-3 rounded-xl border border-red-100">{loginError}</p>}
                                 <button type="submit" className="w-full flex justify-center py-4 px-4 rounded-2xl text-lg font-bold text-white bg-brand-gold hover:bg-[#a68051] focus:outline-none shadow-xl shadow-brand-gold/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0">
-                                    Vstoupit do aplikace
+                                    Přihlásit se
                                 </button>
                             </form>
                         </div>
@@ -360,7 +409,7 @@
                                 <span className="text-xs font-bold text-brand-gray uppercase hidden md:block">Profil:</span>
                                 <span className="text-brand-gold font-bold text-sm">{activeRole}</span>
                                 <div className="h-4 w-px bg-brand-gray/30 mx-1"></div>
-                                <button onClick={() => {setIsAppUnlocked(false); setPinInput('');}} className="text-sm font-semibold text-brand-gray hover:text-brand-dark transition-colors">Odhlásit</button>
+                                <button onClick={handleLogout} className="text-sm font-semibold text-brand-gray hover:text-brand-dark transition-colors">Odhlásit</button>
                             </div>
                         </div>
                     </header>
@@ -434,6 +483,7 @@
                                                                 {record.payment} {record.payment === 'POUKAZ' && `(#${record.voucherCode})`}
                                                             </span>
                                                             {record.notes && <div className="text-xs text-brand-gray mt-2 italic">"{record.notes}"</div>}
+                                                            {isAdmin && record.adminNote && <div className="text-xs text-brand-gold mt-1 font-bold bg-brand-gold/10 inline-block px-2 py-0.5 rounded-md">🔒 {record.adminNote}</div>}
                                                         </div>
                                                         
                                                         {(!isMonthLocked || isAdmin) && (
@@ -485,6 +535,7 @@
                                                             <td className="px-6 py-4 text-sm text-brand-gray max-w-[200px]">
                                                                 {record.payment === 'POUKAZ' && <span className="block text-xs font-bold text-purple-600 mb-0.5">#{record.voucherCode}</span>}
                                                                 <span className="truncate block">{record.notes}</span>
+                                                                {isAdmin && record.adminNote && <span className="block text-xs font-bold text-brand-gold mt-1 bg-brand-gold/10 px-2 py-0.5 rounded-md truncate w-max max-w-full">🔒 {record.adminNote}</span>}
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                                 {(!isMonthLocked || isAdmin) && (
@@ -554,14 +605,14 @@
                         </div>
                     </main>
 
-                    {}
+                    {/* Mobilní FAB pro přidání záznamu */}
                     {!activeRole.includes('Účetní') && !(isMonthLocked && !isAdmin) && (
                         <button onClick={openModalForNew} className="md:hidden fixed bottom-6 right-6 w-16 h-16 bg-brand-gold text-white rounded-[1.5rem] shadow-glass shadow-brand-gold/40 flex items-center justify-center z-40 transform active:scale-95 transition-all">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
                         </button>
                     )}
 
-                    {}
+                    {/* Modální Okno */}
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-brand-dark/40 backdrop-blur-sm transition-opacity p-0 sm:p-4">
                             <div className="bg-white/90 backdrop-blur-2xl w-full max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-glass border-t sm:border border-white/50 overflow-hidden transform animate-slide-up max-h-[90vh] flex flex-col">
@@ -617,6 +668,13 @@
                                             <label className="block text-xs font-extrabold text-brand-gray uppercase mb-1.5 ml-1">Poznámka</label>
                                             <input type="text" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Volitelné..." className="w-full bg-white/50 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-medium outline-none" />
                                         </div>
+                                        
+                                        {isAdmin && (
+                                            <div className="animate-fade-in">
+                                                <label className="block text-xs font-extrabold text-brand-gold uppercase mb-1.5 ml-1 flex items-center gap-1"><span>🔒</span> Tajná poznámka (Pouze Admin)</label>
+                                                <input type="text" value={formData.adminNote} onChange={e => setFormData({...formData, adminNote: e.target.value})} placeholder="Tuto poznámku uvidíte jen vy..." className="w-full bg-brand-gold/5 border border-brand-gold/30 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-gold py-3 px-4 font-medium outline-none text-brand-dark placeholder-brand-gold/40" />
+                                            </div>
+                                        )}
                                     </form>
                                 </div>
                                 
